@@ -1,0 +1,27 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+src-tauri/target
+website/releases/*.dmg
+website/releases/*.exe
+website/releases/*.msi
+website/releases/*.tar.gz
+website/releases/*.sig
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea

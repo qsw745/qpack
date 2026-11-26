@@ -1,0 +1,39 @@
+{
+  "name": "qpack",
+  "private": true,
+  "version": "0.1.2",
+  "description": "QPack - 极简、高性能、跨平台解压缩工具",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "build:dmg": "TAURI_SIGNING_PRIVATE_KEY=\"$HOME/.tauri/qpack.key\" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=\"\" pnpm tauri build --bundles app && python3 -m dmgbuild -s scripts/dmg-settings.py QPack src-tauri/target/release/bundle/dmg/QPack_0.1.2_aarch64.dmg",
+    "build:win": "TAURI_SIGNING_PRIVATE_KEY=\"$HOME/.tauri/qpack.key\" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=\"\" PATH=\"/opt/homebrew/opt/llvm@21/bin:$PATH\" pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis",
+    "gen:latest": "node scripts/generate-latest-json.mjs",
+    "serve:web": "python3 -m http.server 8080 --bind 0.0.0.0 --directory website"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.13.0",
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "@tauri-apps/plugin-opener": "^2.2.0",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
+    "lucide-react": "^0.511.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.7",
+    "@tauri-apps/cli": "^2.5.0",
+    "@types/react": "^19.1.5",
+    "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^4.5.0",
+    "tailwindcss": "^4.1.7",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

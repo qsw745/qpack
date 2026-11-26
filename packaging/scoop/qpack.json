@@ -1,0 +1,18 @@
+{
+  "version": "0.1.2",
+  "description": "QPack - 极简、高性能、跨平台解压缩工具",
+  "homepage": "http://192.168.31.147:8080",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "http://192.168.31.147:8080/releases/QPack_0.1.2_x64-setup.exe#/dl.exe",
+      "hash": "ea95807491c60085fc46f7c3c8f7c8670ff792e31e44348e3ac88ae1654178f8"
+    }
+  },
+  "installer": {
+    "script": "Start-Process -FilePath \"$dir\\dl.exe\" -ArgumentList '/S' -Wait; Remove-Item \"$dir\\dl.exe\" -Force"
+  },
+  "uninstaller": {
+    "script": "$uninst = Join-Path $env:LOCALAPPDATA 'QPack\\uninstall.exe'; if (Test-Path $uninst) { Start-Process -FilePath $uninst -ArgumentList '/S' -Wait }"
+  }
+}

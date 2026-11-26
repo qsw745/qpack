@@ -1,0 +1,123 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "QPack",
+  "version": "0.1.2",
+  "identifier": "com.qpack.app",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "QPack",
+        "width": 980,
+        "height": 660,
+        "minWidth": 720,
+        "minHeight": 500,
+        "center": true,
+        "resizable": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "dmg": {
+        "background": "./icons/dmg-background.tiff",
+        "windowSize": {
+          "width": 660,
+          "height": 420
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 215
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 215
+        }
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "./icons/icon.ico",
+        "sidebarImage": "./icons/win-nsis-sidebar.bmp",
+        "headerImage": "./icons/win-nsis-header.bmp",
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
+      },
+      "wix": {
+        "language": "zh-CN",
+        "dialogImagePath": "./icons/win-wix-dialog.bmp",
+        "bannerPath": "./icons/win-wix-banner.bmp"
+      }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["zip", "jar", "apk", "ipa", "epub", "cbz"],
+        "name": "ZIP Archive",
+        "description": "ZIP 压缩包",
+        "mimeType": "application/zip",
+        "role": "Editor"
+      },
+      {
+        "ext": ["7z"],
+        "name": "7-Zip Archive",
+        "description": "7Z 压缩包",
+        "mimeType": "application/x-7z-compressed",
+        "role": "Editor"
+      },
+      {
+        "ext": ["rar"],
+        "name": "RAR Archive",
+        "description": "RAR 压缩包",
+        "mimeType": "application/vnd.rar",
+        "role": "Viewer"
+      },
+      {
+        "ext": ["tar", "gz", "tgz", "bz2", "tbz2", "xz", "txz", "zst", "tzst"],
+        "name": "TAR / Unix Archive",
+        "description": "TAR / GZ / ZST 压缩包",
+        "mimeType": "application/x-tar",
+        "role": "Editor"
+      },
+      {
+        "ext": ["iso", "cab", "dmg"],
+        "name": "Disk / Cabinet Image",
+        "description": "镜像与打包文件",
+        "role": "Viewer"
+      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY5OTMzMkMwMkRBMjA0QzgKUldUSUJLSXR3REtUYVl6N281VkZCU1dNWjJGdDk3dnl5OVJBL1pMRG9MRktjeUhleitJaWFJZUQK",
+      "endpoints": [
+        "http://192.168.31.147:8080/releases/latest.json"
+      ],
+      "dangerousInsecureTransportProtocol": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

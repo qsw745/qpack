@@ -1,0 +1,15 @@
+{
+  "version": "0.1.2",
+  "notes": "v0.1.2：新增解压同名冲突确认（新建目录/覆盖/跳过）、实时进度反馈、解压完自动打开文件夹与右键可视化解压",
+  "pub_date": "2026-11-25T11:38:43.455Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSUJLSXR3REtUYVE1OUJ6aDhlTEZtZ3VyS3I0alZtSU82NlN3czdvTDRMU1Jac0ZDZ0ZBQWs4ZmwxazZXdTFkRUtsamFEeUZ6dStGS3NMR0c5T3hzYWJPV1daNDRiUkFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NjA2NjU4CWZpbGU6UVBhY2suYXBwLnRhci5negl2ZXJzaW9uOjAuMS4yCldTRDdZYU5xSGx6MW9iaXQrSVc5Q2pKazNjb1NLSE80MnNxdFd5YzJaZDhBUGQxUThpOGVGMmZOQ0JKSE1zWUZ6ZXo5VVRMdmlxMzJ0RVA0V1Zpa0F3PT0K",
+      "url": "http://192.168.31.147:8080/releases/QPack_0.1.2_aarch64.app.tar.gz"
+    },
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSUJLSXR3REtUYVFmckJIbG5RblF1MVJ3bE9FTlRYOEI2TlJ5R1FkNXZSMUxwQlBOS0tMd0dhUnQwRHlQM25ZRFBKa25wblEyTGFkT1hpYlg2dzJjNWFqSnIwVE9nVkFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NjA2NzIzCWZpbGU6UVBhY2tfMC4xLjJfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4yCk9xc1ZhMjhOeXVFS2Q3RFNlOUZ5cVFrN3ZDWkZPRE5WOWJ5VFNBVU94SHNsb05YQ294by8rcER1TU5YRWVhTFFxTndyT3pmd0g1RFRLOFhnWFZWQ0N3PT0K",
+      "url": "http://192.168.31.147:8080/releases/QPack_0.1.2_x64-setup.exe"
+    }
+  }
+}

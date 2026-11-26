@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QPack — 极简、高性能、跨平台解压缩工具</title>
+    <meta
+      name="description"
+      content="QPack 是一款基于 Tauri 2 与 Rust 打造的极简跨平台解压缩软件。支持智能防套娃解压、中文防乱码、双引擎全格式、应用内自定义右键菜单与自动更新。"
+    />
+    <link rel="icon" type="image/png" href="./assets/logo.png" />
+    <link rel="stylesheet" href="./styles.css?v=6" />
+  </head>
+  <body>
+    <!-- 顶部微光氛围层 -->
+    <div class="bg-canvas" aria-hidden="true">
+      <div class="bg-grid"></div>
+      <div class="bg-orb bg-orb-1"></div>
+      <div class="bg-orb bg-orb-2"></div>
+    </div>
+
+    <!-- 顶部悬浮磨砂导航栏 -->
+    <header class="navbar" id="navbar">
+      <div class="container nav-inner">
+        <a href="#top" class="brand">
+          <img src="./assets/logo.png" alt="QPack Logo" class="brand-logo" />
+          <span class="brand-name">QPack</span>
+          <span class="brand-badge" id="nav-version">v0.1.0</span>
+        </a>
+
+        <nav class="nav-links" aria-label="主导航">
+          <a href="#features">核心特性</a>
+          <a href="#formats">格式支持</a>
+          <a href="#download">下载安装</a>
+          <a href="#faq">常见问题</a>
+        </nav>
+
+        <div class="nav-actions">
+          <button
+            id="theme-toggle"
+            class="icon-btn"
+            type="button"
+            aria-label="切换深色或浅色主题"
+            title="切换外观"
+          >
+            <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+            </svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            </svg>
+          </button>
+          <a href="#download" class="btn btn-primary btn-sm">免费下载</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- Hero 首屏 -->
+      <section class="hero">
+        <div class="container hero-inner">
+          <div class="hero-logo-wrap reveal">
+            <img src="./assets/logo.png" alt="QPack" class="hero-logo" />
+          </div>
+
+          <div class="hero-pill reveal">
+            <span class="pill-dot"></span>
+            <span>Rust 原生内核 · Tauri 2 桌面架构 · macOS &amp; Windows</span>
+          </div>
+
+          <h1 class="hero-title reveal">
+            极简、极速，<br />
+            <span class="gradient-text">告别乱码与套娃</span>的解压缩工具
+          </h1>
+
+          <p class="hero-subtitle reveal">
+            为现代桌面体验重新打磨。自动识别跨平台中文编码、智能防止解压炸弹、原生 Rust 高速引擎叠加 7zz 全格式扩展，安静、轻量、零广告。
+          </p>
+
+          <div class="hero-cta reveal">
+            <a id="primary-download-btn" href="#download" class="btn btn-primary btn-lg">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" x2="12" y1="15" y2="3" />
+              </svg>
+              <span id="primary-download-label">免费下载 QPack</span>
+            </a>
+            <a href="#cli-install" class="btn btn-secondary btn-lg">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" x2="20" y1="19" y2="19" />
+              </svg>
+              <span>命令行一键安装</span>
+            </a>
+          </div>
+
+          <p class="detected-os-hint reveal" id="detected-os-hint">
+            已为你匹配当前系统版本 · <a href="#download">查看全部平台安装包</a>
+          </p>
+
+          <!-- 关键亮点指标栏 -->
+          <div class="metrics-strip reveal">
+            <div class="metric-item">
+              <strong>3.5 MB</strong>
+              <span>轻量安装包体积</span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-item">
+              <strong>15+</strong>
+              <span>主流与扩展格式</span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-item">
+              <strong>0 广告</strong>
+              <span>纯净无弹窗打扰</span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-item">
+              <strong>自动更新</strong>
+              <span>Ed25519 签名校验</span>
+            </div>
+          </div>
+
+          <!-- 交互式 QPack 应用界面预览 -->
+          <div class="app-showcase reveal">
+            <div class="app-bezel">
+              <div class="app-window">
+                <div class="window-titlebar">
+                  <div class="traffic-lights">
+                    <span class="dot dot-red"></span>
+                    <span class="dot dot-yellow"></span>
+                    <span class="dot dot-green"></span>
+                  </div>
+                  <div class="window-title">
+                    <img src="./assets/logo.png" alt="" class="mini-logo" />
+                    <span>2026项目交付资料包.zip</span>
+                    <span class="pill-mini">Rust 原生引擎</span>
+                  </div>
+                  <div class="window-controls">
+                    <div class="encoding-switch" role="group" aria-label="演示编码切换">
+                      <button type="button" class="enc-btn active" data-enc="utf8">自动 UTF-8 / GBK</button>
+                      <button type="button" class="enc-btn" data-enc="garbled">传统乱码对比</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="window-toolbar">
+                  <div class="toolbar-left">
+                    <button type="button" class="mock-btn mock-btn-primary" id="demo-extract-btn">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                      </svg>
+                      <span>智能解压</span>
+                    </button>
+                    <button type="button" class="mock-btn">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                      </svg>
+                      <span>新建压缩</span>
+                    </button>
+                    <button type="button" class="mock-btn">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <span>快速预览</span>
+                    </button>
+                  </div>
+                  <div class="toolbar-right">
+                    <span class="stat-chip">共 1,284 项</span>
+                    <span class="stat-chip stat-chip-accent">已自动过滤系统垃圾文件</span>
+                  </div>
+                </div>
+
+                <!-- 演示进度条 -->
+                <div class="demo-progress-bar" id="demo-progress-bar" aria-hidden="true">
+                  <div class="demo-progress-fill" id="demo-progress-fill"></div>
+                </div>
+
+                <div class="window-body">
+                  <div class="file-table">
+                    <div class="file-row file-head">
+                      <span>名称</span>
+                      <span class="text-right">大小</span>
+                      <span class="text-right">压缩率</span>
+                      <span class="text-right">类型</span>
+                    </div>
+                    <div class="file-row">
+                      <span class="file-name">
+                        <span class="f-icon f-folder">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                        </span>
+                        <b data-utf8="设计规范与图标源文件/" data-garbled="╔Φ╝╞╣µ╖╢╙δ═╝▒Ω╘┤╬─╝■/">设计规范与图标源文件/</b>
+                      </span>
+                      <span class="mono text-right">128.4 MB</span>
+                      <span class="mono text-right">42%</span>
+                      <span class="muted text-right">文件夹</span>
+                    </div>
+                    <div class="file-row">
+                      <span class="file-name">
+                        <span class="f-icon f-doc">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        </span>
+                        <b data-utf8="产品发布说明_终稿.pdf" data-garbled="▓·╞╖╖ó▓╝╦╡├÷_╓╒╕σ.pdf">产品发布说明_终稿.pdf</b>
+                      </span>
+                      <span class="mono text-right">6.2 MB</span>
+                      <span class="mono text-right">18%</span>
+                      <span class="muted text-right">PDF 文档</span>
+                    </div>
+                    <div class="file-row">
+                      <span class="file-name">
+                        <span class="f-icon f-img">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                        </span>
+                        <b data-utf8="主视觉海报_4K.png" data-garbled="╓≈╩╙╛╡║ú▒¿_4K.png">主视觉海报_4K.png</b>
+                      </span>
+                      <span class="mono text-right">18.9 MB</span>
+                      <span class="mono text-right">9%</span>
+                      <span class="muted text-right">PNG 图像</span>
+                    </div>
+                    <div class="file-row">
+                      <span class="file-name">
+                        <span class="f-icon f-lock">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        </span>
+                        <b data-utf8="财务预算汇总表.xlsx" data-garbled="▓╞╬±╘ñ╦π╗π╫▄▒φ.xlsx">财务预算汇总表.xlsx</b>
+                      </span>
+                      <span class="mono text-right">2.1 MB</span>
+                      <span class="mono text-right">64%</span>
+                      <span class="muted text-right">AES-256 加密</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="window-statusbar" id="demo-status">
+                  <span>就绪 · 智能解压已识别顶层多文件，将自动创建「2026项目交付资料包」目录避免散落</span>
+                  <span class="mono">0.12s 索引完成</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 核心特性 12 列 Bento Grid -->
+      <section id="features" class="section">
+        <div class="container">
+          <div class="section-header reveal">
+            <span class="section-kicker">核心特性</span>
+            <h2 class="section-title">为真实日常痛点而生</h2>
+            <p class="section-desc">
+              砍掉臃肿的广告弹窗与繁杂按钮，把每一行 Rust 代码都花在速度、准确性与桌面原生细节上。
+            </p>
+          </div>
+
+          <div class="bento-grid">
+            <article class="bento-card col-7 reveal">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                </svg>
+              </div>
+              <h3>智能防套娃解压</h3>
+              <p>
+                解压前自动分析压缩包顶层目录结构：若包内散落多个文件，自动新建同名文件夹防止弄乱桌面；若包内已有唯一根目录，则直接释放，彻底告别「文件夹套文件夹」。
+              </p>
+              <div class="smart-compare">
+                <div class="compare-item">
+                  <span class="compare-label">顶层多散落文件</span>
+                  <span class="compare-arrow">→</span>
+                  <span class="compare-result">自动建立同名目录</span>
+                </div>
+                <div class="compare-item">
+                  <span class="compare-label">包内已有单根目录</span>
+                  <span class="compare-arrow">→</span>
+                  <span class="compare-result">直接释放绝不套娃</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="bento-card col-5 reveal">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m5 8 6 6" />
+                  <path d="m4 14 6-6 2-3" />
+                  <path d="M2 5h12" />
+                  <path d="M7 2h1" />
+                  <path d="m22 22-5-10-5 10" />
+                  <path d="M14 18h6" />
+                </svg>
+              </div>
+              <h3>跨平台中文防乱码</h3>
+              <p>
+                内置 <code>chardetng</code> + <code>encoding_rs</code> 引擎，自动识别 Windows 与 macOS 互传的 GBK / Big5 / Shift-JIS 与 UTF-8 文件名，还支持工具栏一键切换编码即时重载。
+              </p>
+              <div class="encoding-pills">
+                <span>UTF-8</span>
+                <span>GBK / GB18030</span>
+                <span>Big5</span>
+                <span>Shift-JIS</span>
+              </div>
+            </article>
+
+            <article class="bento-card col-4 reveal">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+              </div>
+              <h3>Rust + 7zz 双引擎</h3>
+              <p>
+                ZIP、7Z、TAR、ZST 等主流格式由原生 Rust 内核高速处理；自动探测系统或内置 <code>7zz</code>，即刻解锁 RAR / RAR5、ISO、DMG、CAB 全格式。
+              </p>
+            </article>
+
+            <article class="bento-card col-4 reveal">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+              </div>
+              <h3>安全拦截与纯净过滤</h3>
+              <p>
+                内置 Zip Slip 路径穿越防护，支持 ZIP AES-256 加密，压缩与解压自动跳过 <code>.DS_Store</code>、<code>__MACOSX</code> 与 <code>Thumbs.db</code>。
+              </p>
+            </article>
+
+            <article class="bento-card col-4 reveal">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="18" height="18" x="3" y="3" rx="3" />
+                  <path d="M9 3v18" />
+                  <path d="m14 9 3 3-3 3" />
+                </svg>
+              </div>
+              <h3>深度系统与菜单集成</h3>
+              <p>
+                支持双击弹窗预览、居中实时解压进度条、应用内自定义右键菜单、macOS 访达快速操作、Windows 右键菜单以及签名自动更新。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- 格式支持矩阵 -->
+      <section id="formats" class="section section-alt">
+        <div class="container">
+          <div class="section-header reveal">
+            <span class="section-kicker">格式兼容</span>
+            <h2 class="section-title">双引擎覆盖全场景压缩格式</h2>
+            <p class="section-desc">开箱即用满足绝大多数日常格式，按需扩展即可畅通 RAR 与系统镜像文件。</p>
+          </div>
+
+          <div class="format-panels">
+            <div class="format-card reveal">
+              <div class="format-card-head">
+                <span class="engine-badge engine-rust">Rust 原生高速引擎</span>
+                <span class="engine-note">开箱即用 · 零外部依赖</span>
+              </div>
+              <div class="format-tags">
+                <span class="fmt-tag">ZIP <small>读 / 写 · AES-256</small></span>
+                <span class="fmt-tag">7Z <small>读 / 写</small></span>
+                <span class="fmt-tag">TAR <small>读 / 写</small></span>
+                <span class="fmt-tag">TAR.GZ / TGZ <small>读 / 写</small></span>
+                <span class="fmt-tag">TAR.BZ2 <small>读 / 写</small></span>
+                <span class="fmt-tag">TAR.XZ <small>读 / 写</small></span>
+                <span class="fmt-tag">TAR.ZST <small>读 / 写</small></span>
+                <span class="fmt-tag">GZ / BZ2 / XZ / ZST <small>单文件解压</small></span>
+                <span class="fmt-tag">JAR / APK / EPUB <small>兼容浏览</small></span>
+              </div>
+            </div>
+
+            <div class="format-card reveal">
+              <div class="format-card-head">
+                <span class="engine-badge engine-7z">7zz 扩展引擎</span>
+                <span class="engine-note">自动探测系统 7zz / 7z</span>
+              </div>
+              <div class="format-tags">
+                <span class="fmt-tag">RAR / RAR5 <small>高速解压</small></span>
+                <span class="fmt-tag">ISO <small>光盘镜像提取</small></span>
+                <span class="fmt-tag">DMG <small>macOS 镜像</small></span>
+                <span class="fmt-tag">CAB <small>Windows 安装柜</small></span>
+              </div>
+              <div class="cli-inline">
+                <span class="cli-prompt">$</span>
+                <code>brew install sevenzip</code>
+                <button type="button" class="copy-btn" data-copy="brew install sevenzip">复制</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 下载中心 -->
+      <section id="download" class="section">
+        <div class="container">
+          <div class="section-header reveal">
+            <span class="section-kicker">立即获取</span>
+            <h2 class="section-title">下载 QPack <span class="version-accent" id="dl-version">v0.1.0</span></h2>
+            <p class="section-desc">小巧安装包，原生体验，支持 macOS 与 Windows 桌面平台。</p>
+          </div>
+
+          <div class="download-grid" id="download-grid">
+            <!-- macOS Apple Silicon -->
+            <div class="dl-card reveal" data-platform="macos-arm64">
+              <div>
+                <div class="dl-head">
+                  <div class="dl-os-icon">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.96 6.32c.64-.78 1.08-1.86.96-2.94-.93.04-2.06.62-2.72 1.4-.58.68-1.1 1.79-.96 2.84 1.04.08 2.08-.52 2.72-1.3" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3>macOS (Apple Silicon)</h3>
+                    <p>M1 / M2 / M3 / M4 · macOS 12+</p>
+                  </div>
+                </div>
+                <ul class="dl-specs">
+                  <li>自定义 HiDPI 拖拽安装界面</li>
+                  <li>自动注册访达「快速操作」压缩与解压</li>
+                  <li>原生支持 Retina、深浅色与自动更新</li>
+                </ul>
+              </div>
+              <a id="dl-macos-arm64" href="#" class="btn btn-primary btn-block">
+                下载 Apple Silicon (.dmg)
+              </a>
+            </div>
+
+            <!-- macOS Intel -->
+            <div class="dl-card reveal" data-platform="macos-x64">
+              <div>
+                <div class="dl-head">
+                  <div class="dl-os-icon">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.96 6.32c.64-.78 1.08-1.86.96-2.94-.93.04-2.06.62-2.72 1.4-.58.68-1.1 1.79-.96 2.84 1.04.08 2.08-.52 2.72-1.3" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3>macOS (Intel)</h3>
+                    <p>Intel x86_64 · macOS 12+</p>
+                  </div>
+                </div>
+                <ul class="dl-specs">
+                  <li>标准 DMG 安装包，拖拽至应用程序即用</li>
+                  <li>完整支持压缩包关联与双击预览</li>
+                  <li>极低内存占用，冷启动毫秒级响应</li>
+                </ul>
+              </div>
+              <a id="dl-macos-x64" href="#" class="btn btn-secondary btn-block">
+                下载 Intel (.dmg)
+              </a>
+            </div>
+
+            <!-- Windows -->
+            <div class="dl-card reveal" data-platform="windows-x64">
+              <div>
+                <div class="dl-head">
+                  <div class="dl-os-icon">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                      <path d="M3 5.55 10.35 4.5v7.05H3V5.55Zm0 12.9 7.35 1.05v-7H3v5.95Zm8.25 1.18L21 21v-8.45h-9.75v7.08Zm0-15.26v7.18H21V3l-9.75 1.37Z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3>Windows (64 位)</h3>
+                    <p>Windows 10 / 11 (x64)</p>
+                  </div>
+                </div>
+                <ul class="dl-specs">
+                  <li>简体中文自定义 NSIS 图形安装向导</li>
+                  <li>免管理员权限自动集成资源管理器右键</li>
+                  <li>默认双击弹窗预览与实时解压进度条</li>
+                </ul>
+              </div>
+              <a id="dl-windows-x64" href="#" class="btn btn-secondary btn-block">
+                下载 Windows (.exe)
+              </a>
+            </div>
+          </div>
+
+          <!-- 终端命令行一键安装（深色质感代码窗） -->
+          <div id="cli-install" class="terminal-card reveal">
+            <div class="terminal-header">
+              <div class="terminal-title-group">
+                <div class="traffic-lights">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <div>
+                  <h3>终端命令行一键安装</h3>
+                  <p>复制下方命令到终端或 PowerShell，自动下载并完成安装</p>
+                </div>
+              </div>
+              <div class="cli-tabs" role="tablist" aria-label="选择命令行安装方式">
+                <button type="button" class="cli-tab active" data-cli-os="macos">macOS (curl)</button>
+                <button type="button" class="cli-tab" data-cli-os="windows">Windows (PowerShell)</button>
+                <button type="button" class="cli-tab" data-cli-os="brew">Homebrew (Cask)</button>
+              </div>
+            </div>
+            <div class="terminal-body">
+              <span class="term-prompt" id="cli-install-prompt">$</span>
+              <code id="cli-install-cmd">curl -fsSL http://192.168.31.147:8080/install.sh | bash</code>
+              <button type="button" class="term-copy-btn" id="cli-install-copy">复制命令</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 常见问题 -->
+      <section id="faq" class="section section-alt">
+        <div class="container">
+          <div class="section-header reveal">
+            <span class="section-kicker">使用指南</span>
+            <h2 class="section-title">常见问题</h2>
+            <p class="section-desc">快速了解默认软件设置、系统右键菜单与扩展格式支持。</p>
+          </div>
+
+          <div class="faq-list">
+            <details class="faq-item reveal" open>
+              <summary>在 macOS 上如何把 QPack 设为默认解压缩软件？</summary>
+              <p>
+                在访达（Finder）中选中任意 <code>.zip</code>（或 <code>.7z</code> / <code>.rar</code>）文件，按 <code>⌘I</code> 打开「显示简介」→ 展开「打开方式」→ 选择 <strong>QPack</strong> → 点击「全部更改…」即可。此后双击该类压缩包都会直接使用 QPack 打开预览或智能解压。
+              </p>
+            </details>
+
+            <details class="faq-item reveal">
+              <summary>Windows 11 右键菜单里在哪里可以看到 QPack？</summary>
+              <p>
+                首次启动 QPack 会自动向当前用户注册表写入右键菜单（无需管理员权限）。在 Windows 11 上，右键文件或文件夹后点击底部 <strong>「显示更多选项」</strong>，或直接按住 <code>Shift + 鼠标右键</code> 即可看到「使用 QPack 智能解压」与「使用 QPack 压缩为 ZIP」。
+              </p>
+            </details>
+
+            <details class="faq-item reveal">
+              <summary>如何开启 RAR / ISO / DMG 全格式解压支持？</summary>
+              <p>
+                macOS 用户在终端执行 <code>brew install sevenzip</code>；Windows 用户安装 7-Zip 并确保 <code>7z.exe</code> 在系统 <code>PATH</code> 中。QPack 会自动探测并启用 7zz 扩展引擎，无需手动配置路径。
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+      <div class="container footer-inner">
+        <div class="footer-brand">
+          <img src="./assets/logo.png" alt="QPack" class="mini-logo" />
+          <span>QPack</span>
+          <span class="footer-sep">·</span>
+          <span class="footer-copy">极简、高性能、跨平台解压缩工具</span>
+        </div>
+        <div class="footer-links">
+          <a href="#features">核心特性</a>
+          <a href="#formats">格式支持</a>
+          <a href="#download">下载中心</a>
+          <a href="#faq">常见问题</a>
+        </div>
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="./app.js?v=7"></script>
+  </body>
+</html>
