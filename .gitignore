@@ -11,6 +11,8 @@ node_modules
 # Build outputs
 dist
 src-tauri/target
+src-tauri/win-shell-ext/target
+target-msix-layout
 website/releases/*.dmg
 website/releases/*.exe
 website/releases/*.msi

@@ -56,13 +56,17 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --bundles nsis,msi
 
-      - name: Prepare artifacts directory
+      - name: Build Windows 11 native context menu COM DLL
+        run: cargo build --release --manifest-path src-tauri/win-shell-ext/Cargo.toml
+
+      - name: Prepare artifacts directory & build Microsoft Store MSIX
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist-windows | Out-Null
           Copy-Item "src-tauri/target/release/bundle/nsis/*.exe" dist-windows/ -ErrorAction SilentlyContinue
           Copy-Item "src-tauri/target/release/bundle/nsis/*.exe.sig" dist-windows/ -ErrorAction SilentlyContinue
           Copy-Item "src-tauri/target/release/bundle/msi/*.msi" dist-windows/ -ErrorAction SilentlyContinue
+          ./packaging/msix/build-msix.ps1 -OutDir dist-windows
           Get-ChildItem dist-windows/
 
       - name: Pack unsigned Windows installers for SignPath
@@ -250,5 +254,6 @@ jobs:
             release-assets/*.dmg
             release-assets/*.exe
             release-assets/*.msi
+            release-assets/*.msix
             release-assets/*.tar.gz
             release-assets/latest.json

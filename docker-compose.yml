@@ -1,0 +1,10 @@
+services:
+  qpack-website:
+    image: nginx:alpine
+    container_name: qpack-website
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8080:80"
+    volumes:
+      - ./website:/usr/share/nginx/html:ro
+      - ./website/nginx.conf:/etc/nginx/conf.d/default.conf:ro

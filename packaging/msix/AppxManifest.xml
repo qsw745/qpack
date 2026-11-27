@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap uap3 rescap desktop4 desktop5 com">
+
+  <Identity
+    Name="qsw745.QPack"
+    Publisher="CN=596AC5F4-8655-4DA2-87BB-7EE74B603B55"
+    Version="__VERSION_4__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>QPack</DisplayName>
+    <PublisherDisplayName>qsw745</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="zh-CN" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application
+      Id="QPack"
+      Executable="qpack.exe"
+      EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="QPack"
+        Description="极简、高性能、跨平台解压缩工具（智能防套娃、中文防乱码、双引擎）"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          Square71x71Logo="Assets\Square71x71Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png"
+          ShortName="QPack" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- 压缩包文件关联（双击与「打开方式」） -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="qpack-archive">
+            <uap:DisplayName>QPack 压缩包</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.zip</uap:FileType>
+              <uap:FileType>.7z</uap:FileType>
+              <uap:FileType>.rar</uap:FileType>
+              <uap:FileType>.tar</uap:FileType>
+              <uap:FileType>.gz</uap:FileType>
+              <uap:FileType>.tgz</uap:FileType>
+              <uap:FileType>.bz2</uap:FileType>
+              <uap:FileType>.tbz2</uap:FileType>
+              <uap:FileType>.xz</uap:FileType>
+              <uap:FileType>.txz</uap:FileType>
+              <uap:FileType>.zst</uap:FileType>
+              <uap:FileType>.tzst</uap:FileType>
+              <uap:FileType>.iso</uap:FileType>
+              <uap:FileType>.cab</uap:FileType>
+              <uap:FileType>.dmg</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- 注册 Windows 11 现代一级右键菜单 COM Server -->
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="QPack Shell Extension">
+              <com:Class
+                Id="8b6a9c10-5e42-4d31-9a77-2c6f814e3a01"
+                Path="qpack_shell_ext.dll"
+                ThreadingModel="STA" />
+              <com:Class
+                Id="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02"
+                Path="qpack_shell_ext.dll"
+                ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+
+        <!-- 挂载到 Windows 11 原生现代一级右键菜单（无需点击「显示更多选项」） -->
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="QPackCompressFile" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a01" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="QPackCompressDir" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a01" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".zip">
+              <desktop5:Verb Id="QPackExtractZip" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".7z">
+              <desktop5:Verb Id="QPackExtract7z" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".rar">
+              <desktop5:Verb Id="QPackExtractRar" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".tar">
+              <desktop5:Verb Id="QPackExtractTar" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".gz">
+              <desktop5:Verb Id="QPackExtractGz" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".tgz">
+              <desktop5:Verb Id="QPackExtractTgz" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".bz2">
+              <desktop5:Verb Id="QPackExtractBz2" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".xz">
+              <desktop5:Verb Id="QPackExtractXz" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".zst">
+              <desktop5:Verb Id="QPackExtractZst" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".iso">
+              <desktop5:Verb Id="QPackExtractIso" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".cab">
+              <desktop5:Verb Id="QPackExtractCab" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".dmg">
+              <desktop5:Verb Id="QPackExtractDmg" Clsid="8b6a9c10-5e42-4d31-9a77-2c6f814e3a02" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

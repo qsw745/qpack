@@ -1,0 +1,30 @@
+[package]
+name = "qpack_shell_ext"
+version = "0.1.2"
+edition = "2021"
+description = "QPack Windows 11 native Explorer context menu COM extension"
+
+[lib]
+name = "qpack_shell_ext"
+crate-type = ["cdylib"]
+
+[dependencies]
+windows-core = "0.61"
+
+[dependencies.windows]
+version = "0.61"
+features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_LibraryLoader",
+  "Win32_System_SystemServices",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging",
+]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
