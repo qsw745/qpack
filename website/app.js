@@ -3,6 +3,7 @@
  */
 const RELEASE_CONFIG = {
   version: "v0.1.7",
+  microsoftStoreUrl: "https://apps.microsoft.com/detail/9NHLSGG1BZMZ",
   downloads: {
     "macos-arm64": {
       osName: "macOS (Apple Silicon)",
@@ -23,7 +24,8 @@ const RELEASE_CONFIG = {
     },
     "windows-x64": {
       osName: "Windows 64 位",
-      label: "下载 Windows (64 位)",
+      label: "前往 Microsoft Store 下载",
+      storeUrl: "https://apps.microsoft.com/detail/9NHLSGG1BZMZ",
       candidates: [
         "./releases/QPack_0.1.7_x64-setup.exe",
         "./releases/QPack_0.1.6_x64-setup.exe",
@@ -125,35 +127,56 @@ function initDownloads() {
 
   Object.entries(RELEASE_CONFIG.downloads).forEach(([key, item]) => {
     const link = document.getElementById(`dl-${key}`);
-    if (link) {
-      // 仅当前系统的下载按钮用主按钮样式，其余平台用次级按钮
-      link.classList.toggle("btn-primary", key === detected);
-      link.classList.toggle("btn-secondary", key !== detected);
-      link.setAttribute("href", item.candidates[0]);
+    if (!link) return;
 
-      resolveAvailableRelease(item.candidates).then((found) => {
-        if (found) {
-          link.setAttribute("href", found.url);
-          const sizeTag = found.sizeBytes ? ` · ${formatBytes(found.sizeBytes)}` : "";
-          if (key === "windows-x64") {
-            const base = found.url.endsWith(".exe")
-              ? "下载 Windows 安装程序 (.exe)"
-              : "下载 Windows 安装程序 (.msi)";
-            link.textContent = `${base}${sizeTag}`;
+    // 仅当前系统的下载按钮用主按钮样式，其余平台用次级按钮
+    link.classList.toggle("btn-primary", key === detected);
+    link.classList.toggle("btn-secondary", key !== detected);
+
+    // Windows 平台主按钮直达 Microsoft Store，同时保留离线 .exe 安装包备用链接
+    if (key === "windows-x64" && item.storeUrl) {
+      link.setAttribute("href", item.storeUrl);
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+
+      if (key === detected && primaryBtn && primaryLabel) {
+        primaryBtn.setAttribute("href", item.storeUrl);
+        primaryBtn.setAttribute("target", "_blank");
+        primaryBtn.setAttribute("rel", "noopener noreferrer");
+        primaryLabel.textContent = `前往 Microsoft Store 下载 (${RELEASE_CONFIG.version})`;
+      }
+
+      const offlineLink = document.getElementById("dl-windows-x64-offline");
+      if (offlineLink) {
+        resolveAvailableRelease(item.candidates).then((found) => {
+          if (found) {
+            offlineLink.setAttribute("href", found.url);
+            const sizeTag = found.sizeBytes ? ` · ${formatBytes(found.sizeBytes)}` : "";
+            offlineLink.textContent = `或下载离线安装包 (.exe${sizeTag})`;
           } else {
-            link.textContent = `${link.textContent.trim()}${sizeTag}`;
+            offlineLink.style.display = "none";
           }
-
-          // 首屏 Hero 主下载按钮直连当前系统的真实安装包与真实大小
-          if (key === detected && primaryBtn && primaryLabel) {
-            primaryBtn.setAttribute("href", found.url);
-            primaryLabel.textContent = `${item.label} ${RELEASE_CONFIG.version}${sizeTag}`;
-          }
-        } else {
-          markUnavailable(link, key);
-        }
-      });
+        });
+      }
+      return;
     }
+
+    link.setAttribute("href", item.candidates[0]);
+    resolveAvailableRelease(item.candidates).then((found) => {
+      if (found) {
+        link.setAttribute("href", found.url);
+        const sizeTag = found.sizeBytes ? ` · ${formatBytes(found.sizeBytes)}` : "";
+        link.textContent = `${link.textContent.trim()}${sizeTag}`;
+
+        // 首屏 Hero 主下载按钮直连当前系统的真实安装包与真实大小
+        if (key === detected && primaryBtn && primaryLabel) {
+          primaryBtn.setAttribute("href", found.url);
+          primaryLabel.textContent = `${item.label} ${RELEASE_CONFIG.version}${sizeTag}`;
+        }
+      } else {
+        markUnavailable(link, key);
+      }
+    });
   });
 }
 

@@ -469,14 +469,29 @@
                   </div>
                 </div>
                 <ul class="dl-specs">
-                  <li>简体中文自定义 NSIS 图形安装向导</li>
-                  <li>免管理员权限自动集成资源管理器右键</li>
-                  <li>默认双击弹窗预览与实时解压进度条</li>
+                  <li>Microsoft Store 官方签名，纯净免拦截</li>
+                  <li>支持 Windows 11 原生一级级联右键菜单</li>
+                  <li>内置 7-Zip 引擎与多格式压缩包图标</li>
                 </ul>
               </div>
-              <a id="dl-windows-x64" href="#" class="btn btn-secondary btn-block">
-                下载 Windows (.exe)
-              </a>
+              <div class="dl-actions">
+                <a
+                  id="dl-windows-x64"
+                  href="https://apps.microsoft.com/detail/9NHLSGG1BZMZ"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn btn-secondary btn-block"
+                >
+                  前往 Microsoft Store 下载
+                </a>
+                <a
+                  id="dl-windows-x64-offline"
+                  href="./releases/QPack_0.1.7_x64-setup.exe"
+                  class="dl-sub-link"
+                >
+                  或下载离线安装包 (.exe)
+                </a>
+              </div>
             </div>
           </div>
 
@@ -529,14 +544,14 @@
             <details class="faq-item reveal">
               <summary>Windows 11 右键菜单里在哪里可以看到 QPack？</summary>
               <p>
-                首次启动 QPack 会自动向当前用户注册表写入右键菜单（无需管理员权限）。在 Windows 11 上，右键文件或文件夹后点击底部 <strong>「显示更多选项」</strong>，或直接按住 <code>Shift + 鼠标右键</code> 即可看到「使用 QPack 智能解压」与「使用 QPack 压缩为 ZIP」。
+                通过 <strong>Microsoft Store</strong> 安装的 QPack 内置原生 COM 扩展，在 Windows 11 上右键文件、文件夹或任意压缩包即可在<strong>一级菜单直接看到「QPack」级联菜单</strong>（智能解压、解压到此处、压缩为 ZIP/7Z 等），无需点击「显示更多选项」。离线 <code>.exe</code> 安装版则可在「显示更多选项」或 <code>Shift + 右键</code> 中使用。
               </p>
             </details>
 
             <details class="faq-item reveal">
-              <summary>如何开启 RAR / ISO / DMG 全格式解压支持？</summary>
+              <summary>打开 RAR / ISO / DMG / CAB 需要额外安装 7-Zip 吗？</summary>
               <p>
-                macOS 用户在终端执行 <code>brew install sevenzip</code>；Windows 用户安装 7-Zip 并确保 <code>7z.exe</code> 在系统 <code>PATH</code> 中。QPack 会自动探测并启用 7zz 扩展引擎，无需手动配置路径。
+                <strong>完全不需要。</strong>QPack 已内置官方 7-Zip 26.06 跨平台引擎与 macOS 原生 DMG 引擎，安装即可开箱支持 ZIP、7Z、RAR、TAR、GZ、BZ2、XZ、ZST、ISO、DMG、CAB、WIM 等 20+ 种格式，零额外配置。
               </p>
             </details>
           </div>
@@ -564,6 +579,6 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=12"></script>
+    <script src="./app.js?v=13"></script>
   </body>
 </html>
