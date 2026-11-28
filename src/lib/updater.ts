@@ -1,5 +1,11 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { api } from "./api";
+
+export const MICROSOFT_STORE_WEB_URL =
+  "https://apps.microsoft.com/detail/9NHLSGG1BZMZ";
+export const MICROSOFT_STORE_DEEP_LINK =
+  "ms-windows-store://pdp/?productid=9NHLSGG1BZMZ";
 
 export interface UpdateProgress {
   downloaded: number;
@@ -7,10 +13,30 @@ export interface UpdateProgress {
   percent: number | null;
 }
 
+let cachedStoreBuild: boolean | null = null;
+
 /**
- * 检查是否有新版本可用；无更新返回 null
+ * 判断当前是否由 Microsoft Store 托管分发与更新（MSIX 商店版）
+ */
+export async function isStoreManagedUpdate(): Promise<boolean> {
+  if (cachedStoreBuild !== null) {
+    return cachedStoreBuild;
+  }
+  try {
+    cachedStoreBuild = await api.isMicrosoftStoreBuild();
+  } catch {
+    cachedStoreBuild = false;
+  }
+  return cachedStoreBuild;
+}
+
+/**
+ * 检查是否有新版本可用；Microsoft Store 版由微软商店统一托管更新，直接跳过外部自更新
  */
 export async function checkForAppUpdate(): Promise<Update | null> {
+  if (await isStoreManagedUpdate()) {
+    return null;
+  }
   const update = await check();
   return update ?? null;
 }
@@ -37,7 +63,10 @@ export async function downloadAndInstallUpdate(
         onProgress?.({
           downloaded,
           total,
-          percent: total && total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
+          percent:
+            total && total > 0
+              ? Math.min(100, Math.round((downloaded / total) * 100))
+              : null,
         });
         break;
       case "Finished":

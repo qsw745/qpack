@@ -202,6 +202,37 @@ fn current_exe_str() -> QResult<String> {
     Ok(exe.to_string_lossy().into_owned())
 }
 
+/// 判断当前进程是否以 Microsoft Store (MSIX) 商店包身份运行
+pub fn is_microsoft_store_build() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetCurrentPackageFullName(
+                package_full_name_length: *mut u32,
+                package_full_name: *mut u16,
+            ) -> i32;
+        }
+        const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+        let mut len: u32 = 0;
+        let rc = unsafe { GetCurrentPackageFullName(&mut len, std::ptr::null_mut()) };
+        if rc == 0 || rc == ERROR_INSUFFICIENT_BUFFER {
+            return true;
+        }
+        if let Ok(exe) = current_exe_str() {
+            if exe.to_ascii_lowercase().contains("\\windowsapps\\") {
+                return true;
+            }
+        }
+        false
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
 /// 查询当前平台的系统集成状态
 pub fn get_integration_status() -> SystemIntegrationStatus {
     let exe = current_exe_str().unwrap_or_default();

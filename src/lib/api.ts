@@ -52,6 +52,8 @@ export const api = {
 
   refreshFileIcons: () => invoke<void>("refresh_file_icons"),
 
+  isMicrosoftStoreBuild: () => invoke<boolean>("is_microsoft_store_build"),
+
   detectEngineStatus: () => invoke<EngineStatus>("detect_engine_status"),
 
   isSupportedArchive: (path: string) =>

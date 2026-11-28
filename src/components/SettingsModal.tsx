@@ -11,9 +11,16 @@ import {
   X,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { api } from "../lib/api";
-import { checkForAppUpdate, downloadAndInstallUpdate } from "../lib/updater";
+import {
+  checkForAppUpdate,
+  downloadAndInstallUpdate,
+  isStoreManagedUpdate,
+  MICROSOFT_STORE_DEEP_LINK,
+  MICROSOFT_STORE_WEB_URL,
+} from "../lib/updater";
 import { useAppStore } from "../stores/useAppStore";
 import type {
   AppSettings,
@@ -46,7 +53,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     useState<SystemIntegrationStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshingIcons, setRefreshingIcons] = useState(false);
-  const [appVersion, setAppVersion] = useState("0.1.5");
+  const [appVersion, setAppVersion] = useState("0.1.8");
+  const [isStoreBuild, setIsStoreBuild] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -58,6 +66,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     api.getAppSettings().then(setSettings).catch(() => {});
     api.getSystemIntegrationStatus().then(setIntegration).catch(() => {});
     getVersion().then(setAppVersion).catch(() => {});
+    isStoreManagedUpdate().then(setIsStoreBuild).catch(() => {});
   }, [open, setSettings]);
 
   if (!open) return null;
@@ -444,11 +453,26 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   软件版本与自动更新
                 </p>
                 <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  当前版本 v{appVersion} · 启动时自动静默检查更新
+                  {isStoreBuild
+                    ? `当前版本 v${appVersion} · 由 Microsoft Store 托管自动更新`
+                    : `当前版本 v${appVersion} · 启动时自动静默检查更新`}
                 </p>
               </div>
 
-              {availableUpdate ? (
+              {isStoreBuild ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    openUrl(MICROSOFT_STORE_DEEP_LINK).catch(() => {
+                      openUrl(MICROSOFT_STORE_WEB_URL).catch(() => {});
+                    });
+                  }}
+                  className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  在微软商店检查更新
+                </button>
+              ) : availableUpdate ? (
                 <button
                   type="button"
                   disabled={updating}

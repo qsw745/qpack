@@ -240,6 +240,12 @@ pub async fn refresh_file_icons() -> QResult<()> {
         .map_err(|e| QPackError::ArchiveError(e.to_string()))?
 }
 
+/// 判断当前是否运行于 Microsoft Store (MSIX) 商店版环境
+#[tauri::command]
+pub fn is_microsoft_store_build() -> bool {
+    platform::is_microsoft_store_build()
+}
+
 /// 探测引擎状态与支持格式
 #[tauri::command]
 pub fn detect_engine_status() -> EngineStatus {

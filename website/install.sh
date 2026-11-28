@@ -7,7 +7,7 @@ set -euo pipefail
 
 BASE_URL="${QPACK_BASE_URL:-http://192.168.31.147:8080}"
 BASE_URL="${BASE_URL%/}"
-VERSION="${QPACK_VERSION:-0.1.7}"
+VERSION="${QPACK_VERSION:-0.1.8}"
 
 ARCH="$(uname -m)"
 case "$ARCH" in

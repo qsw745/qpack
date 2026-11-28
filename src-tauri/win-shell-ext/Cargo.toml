@@ -1,6 +1,6 @@
 [package]
 name = "qpack_shell_ext"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 description = "QPack Windows 11 native Explorer context menu COM extension"
 

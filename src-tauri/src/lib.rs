@@ -281,6 +281,7 @@ pub fn run() {
             commands::install_system_context_menu,
             commands::uninstall_system_context_menu,
             commands::refresh_file_icons,
+            commands::is_microsoft_store_build,
             commands::detect_engine_status,
             commands::is_supported_archive,
             commands::inspect_archive,
