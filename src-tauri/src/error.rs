@@ -22,6 +22,9 @@ pub enum QPackError {
     #[error("压缩/解压处理失败: {0}")]
     ArchiveError(String),
 
+    #[error("操作已取消")]
+    Cancelled,
+
     #[error("I/O 错误: {0}")]
     Io(#[from] std::io::Error),
 }

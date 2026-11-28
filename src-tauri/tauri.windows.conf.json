@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "resources": {
+      "binaries/windows/7z.exe": "binaries/7z.exe",
+      "binaries/windows/7z.dll": "binaries/7z.dll",
+      "icons/file-types/*.ico": "icons/file-types/"
+    }
+  }
+}

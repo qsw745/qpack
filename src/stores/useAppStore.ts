@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { ArchiveInfo, EngineStatus, TaskProgress } from "../types/archive";
+import {
+  DEFAULT_APP_SETTINGS,
+  type ActiveTask,
+  type AppSettings,
+  type ArchiveInfo,
+  type EngineStatus,
+  type TaskProgress,
+} from "../types/archive";
 
 export interface ToastNotice {
   id: string;
@@ -7,17 +14,20 @@ export interface ToastNotice {
   title: string;
   detail?: string;
   actionPath?: string;
+  actionReveal?: boolean;
 }
 
 interface AppState {
   engineStatus: EngineStatus | null;
+  settings: AppSettings;
+  standaloneMode: boolean;
   archive: ArchiveInfo | null;
   loading: boolean;
   encodingOverride: string;
   currentDir: string;
   searchQuery: string;
   selectedPaths: Set<string>;
-  progress: TaskProgress | null;
+  activeTask: ActiveTask | null;
   toast: ToastNotice | null;
 
   // 新建压缩弹窗状态
@@ -25,6 +35,8 @@ interface AppState {
   compressInputs: string[];
 
   setEngineStatus: (status: EngineStatus) => void;
+  setSettings: (settings: AppSettings) => void;
+  setStandaloneMode: (standalone: boolean) => void;
   setArchive: (info: ArchiveInfo | null) => void;
   setLoading: (loading: boolean) => void;
   setEncodingOverride: (enc: string) => void;
@@ -33,7 +45,13 @@ interface AppState {
   toggleSelect: (path: string) => void;
   clearSelection: () => void;
   selectAll: (paths: string[]) => void;
-  setProgress: (progress: TaskProgress | null) => void;
+
+  // 任务进度弹窗管理
+  startTask: (task: ActiveTask) => void;
+  updateTaskProgress: (progress: TaskProgress) => void;
+  patchActiveTask: (patch: Partial<ActiveTask>) => void;
+  clearActiveTask: () => void;
+
   showToast: (toast: Omit<ToastNotice, "id">) => void;
   clearToast: () => void;
   openCompressModal: (inputs?: string[]) => void;
@@ -44,18 +62,22 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   engineStatus: null,
+  settings: DEFAULT_APP_SETTINGS,
+  standaloneMode: false,
   archive: null,
   loading: false,
   encodingOverride: "auto",
   currentDir: "",
   searchQuery: "",
   selectedPaths: new Set(),
-  progress: null,
+  activeTask: null,
   toast: null,
   compressModalOpen: false,
   compressInputs: [],
 
   setEngineStatus: (engineStatus) => set({ engineStatus }),
+  setSettings: (settings) => set({ settings }),
+  setStandaloneMode: (standaloneMode) => set({ standaloneMode }),
   setArchive: (archive) =>
     set({
       archive,
@@ -80,7 +102,41 @@ export const useAppStore = create<AppState>((set) => ({
     }),
   clearSelection: () => set({ selectedPaths: new Set() }),
   selectAll: (paths) => set({ selectedPaths: new Set(paths) }),
-  setProgress: (progress) => set({ progress }),
+
+  startTask: (activeTask) => set({ activeTask }),
+  updateTaskProgress: (progress) =>
+    set((state) => {
+      if (!state.activeTask || state.activeTask.taskId !== progress.taskId) {
+        return state;
+      }
+      // 已终结状态不再被滞后事件覆盖
+      if (
+        state.activeTask.status === "completed" ||
+        state.activeTask.status === "cancelled" ||
+        state.activeTask.status === "error"
+      ) {
+        return state;
+      }
+      return {
+        activeTask: {
+          ...state.activeTask,
+          status: progress.paused ? "paused" : "running",
+          progress,
+        },
+      };
+    }),
+  patchActiveTask: (patch) =>
+    set((state) => {
+      if (!state.activeTask) return state;
+      return {
+        activeTask: {
+          ...state.activeTask,
+          ...patch,
+        },
+      };
+    }),
+  clearActiveTask: () => set({ activeTask: null }),
+
   showToast: (toast) =>
     set({ toast: { ...toast, id: `${Date.now()}-${Math.random()}` } }),
   clearToast: () => set({ toast: null }),

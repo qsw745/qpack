@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "qpack_shell_ext"
-version = "0.1.2"
+version = "0.1.7"
 dependencies = [
  "windows",
  "windows-core",

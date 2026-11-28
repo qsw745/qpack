@@ -1,12 +1,12 @@
 {
-  "version": "0.1.2",
+  "version": "0.1.7",
   "description": "QPack - 极简、高性能、跨平台解压缩工具",
   "homepage": "http://192.168.31.147:8080",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "http://192.168.31.147:8080/releases/QPack_0.1.2_x64-setup.exe#/dl.exe",
-      "hash": "ea95807491c60085fc46f7c3c8f7c8670ff792e31e44348e3ac88ae1654178f8"
+      "url": "http://192.168.31.147:8080/releases/QPack_0.1.7_x64-setup.exe#/dl.exe",
+      "hash": "f23ad3e607ae1d0e83da4ff00695bcc61f6e0c9b611d084167c2641d1888c27a"
     }
   },
   "installer": {

@@ -43,6 +43,8 @@ interface ArchiveBrowserProps {
   onPreviewFile: (entryPath: string) => void;
   onExtractSelected: () => void;
   onSmartExtractAll: () => void;
+  onExtractHereAll: () => void;
+  onExtractSubfolderAll: () => void;
   onExtractAllToFolder: () => void;
 }
 
@@ -166,6 +168,8 @@ export function ArchiveBrowser({
   onPreviewFile,
   onExtractSelected,
   onSmartExtractAll,
+  onExtractHereAll,
+  onExtractSubfolderAll,
   onExtractAllToFolder,
 }: ArchiveBrowserProps) {
   const archive = useAppStore((s) => s.archive);
@@ -572,7 +576,33 @@ export function ArchiveBrowser({
             className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-            <span>全部智能解压到同级目录</span>
+            <span>智能解压到同级目录</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
+              onExtractHereAll();
+            }}
+            className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <FolderOpen className="h-3.5 w-3.5 text-zinc-500" />
+            <span>直接解压到同级目录</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
+              onExtractSubfolderAll();
+            }}
+            className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <Folder className="h-3.5 w-3.5 text-zinc-500" />
+            <span className="truncate">
+              解压到 {archive.suggestedFolderName}/
+            </span>
           </button>
 
           <button
@@ -584,7 +614,7 @@ export function ArchiveBrowser({
             className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <FolderOutput className="h-3.5 w-3.5 text-zinc-500" />
-            <span>全部解压到指定目录…</span>
+            <span>解压到其他文件夹…</span>
           </button>
 
           {contextMenu.item && (

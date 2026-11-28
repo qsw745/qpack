@@ -1,3 +1,4 @@
+use crate::models::CompressFormat;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -6,7 +7,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DoubleClickAction {
-    /// 直接在后台静默智能解压到同级目录（类似 Keka / 归档实用工具）
+    /// 弹出紧凑进度窗口直接智能解压到同级目录（类似 Bandizip）
     SmartExtract,
     /// 打开 QPack 窗口预览压缩包内容
     Browse,
@@ -18,9 +19,9 @@ impl Default for DoubleClickAction {
     }
 }
 
-/// QPack 用户偏好设置
+/// QPack 用户偏好设置（缺失字段自动回落到默认值，兼容旧版 settings.json）
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
     /// 双击/打开方式触发压缩包时的默认动作
     pub double_click_action: DoubleClickAction,
@@ -28,6 +29,14 @@ pub struct AppSettings {
     pub close_to_tray: bool,
     /// 压缩时默认排除 .DS_Store / __MACOSX / Thumbs.db
     pub exclude_junk: bool,
+    /// 解压完成后自动打开文件管理器定位文件
+    pub open_folder_after_extract: bool,
+    /// 压缩完成后自动打开文件管理器并选中生成的压缩包
+    pub open_folder_after_compress: bool,
+    /// 任务完成后自动关闭进度窗口
+    pub auto_close_progress_window: bool,
+    /// 新建压缩包时的默认格式
+    pub default_compress_format: CompressFormat,
 }
 
 impl Default for AppSettings {
@@ -36,6 +45,10 @@ impl Default for AppSettings {
             double_click_action: DoubleClickAction::Browse,
             close_to_tray: true,
             exclude_junk: true,
+            open_folder_after_extract: true,
+            open_folder_after_compress: false,
+            auto_close_progress_window: false,
+            default_compress_format: CompressFormat::Zip,
         }
     }
 }

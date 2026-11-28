@@ -8,31 +8,99 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { api, formatBytes } from "../lib/api";
+import { api } from "../lib/api";
 import { useAppStore } from "../stores/useAppStore";
-import type { CompressFormat } from "../types/archive";
+import type { CompressFormat, CompressOptions } from "../types/archive";
 
-const FORMAT_OPTIONS: { value: CompressFormat; label: string; desc: string }[] = [
-  { value: "zip", label: "ZIP", desc: "通用性最强，支持 AES-256 加密" },
-  { value: "seven-z", label: "7Z", desc: "高压缩率，适合文档与源码" },
-  { value: "tar-zst", label: "TAR.ZST", desc: "极速压缩，现代高性能格式" },
-  { value: "tar-gz", label: "TAR.GZ", desc: "Linux / macOS 标准格式" },
-  { value: "tar", label: "TAR", desc: "仅打包不压缩，速度最快" },
+const FORMAT_OPTIONS: {
+  value: CompressFormat;
+  label: string;
+  desc: string;
+  supportsEncryption: boolean;
+}[] = [
+  {
+    value: "zip",
+    label: "ZIP",
+    desc: "通用性最强，支持 AES-256 加密",
+    supportsEncryption: true,
+  },
+  {
+    value: "seven-z",
+    label: "7Z",
+    desc: "高压缩率 LZMA2，支持 AES-256 加密",
+    supportsEncryption: true,
+  },
+  {
+    value: "tar-zst",
+    label: "TAR.ZST",
+    desc: "极速压缩，现代高性能格式",
+    supportsEncryption: false,
+  },
+  {
+    value: "tar-gz",
+    label: "TAR.GZ",
+    desc: "Linux / macOS 标准格式",
+    supportsEncryption: false,
+  },
+  {
+    value: "tar-xz",
+    label: "TAR.XZ",
+    desc: "LZMA2 超高压缩率，适合分发源码与归档",
+    supportsEncryption: false,
+  },
+  {
+    value: "tar-bz2",
+    label: "TAR.BZ2",
+    desc: "经典高压缩率 Bzip2 格式",
+    supportsEncryption: false,
+  },
+  {
+    value: "tar",
+    label: "TAR",
+    desc: "仅打包不压缩，速度最快",
+    supportsEncryption: false,
+  },
+  {
+    value: "dmg",
+    label: "DMG",
+    desc: "macOS 原生压缩磁盘映像（系统内置引擎，无需额外软件）",
+    supportsEncryption: false,
+  },
 ];
 
-export function CompressModal() {
+interface CompressModalProps {
+  onStartCompress: (options: CompressOptions) => void;
+}
+
+export function CompressModal({ onStartCompress }: CompressModalProps) {
   const isOpen = useAppStore((s) => s.compressModalOpen);
   const inputs = useAppStore((s) => s.compressInputs);
+  const settings = useAppStore((s) => s.settings);
+  const engineStatus = useAppStore((s) => s.engineStatus);
   const closeModal = useAppStore((s) => s.closeCompressModal);
   const setInputs = useAppStore((s) => s.setCompressInputs);
-  const showToast = useAppStore((s) => s.showToast);
 
-  const [format, setFormat] = useState<CompressFormat>("zip");
+  const availableFormats = FORMAT_OPTIONS.filter(
+    (opt) =>
+      opt.value !== "dmg" ||
+      (engineStatus?.supportedWriteFormats.includes("dmg") ?? false)
+  );
+
+  const [format, setFormat] = useState<CompressFormat>(
+    settings.defaultCompressFormat || "zip"
+  );
   const [outputPath, setOutputPath] = useState("");
   const [level, setLevel] = useState(6);
   const [password, setPassword] = useState("");
-  const [excludeJunk, setExcludeJunk] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [excludeJunk, setExcludeJunk] = useState(settings.excludeJunk);
+
+  // 每次打开弹窗时应用用户默认压缩格式与垃圾过滤偏好
+  useEffect(() => {
+    if (!isOpen) return;
+    setFormat(settings.defaultCompressFormat || "zip");
+    setExcludeJunk(settings.excludeJunk);
+    setPassword("");
+  }, [isOpen, settings.defaultCompressFormat, settings.excludeJunk]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -47,6 +115,8 @@ export function CompressModal() {
   }, [isOpen, inputs, format]);
 
   if (!isOpen) return null;
+
+  const supportsEncryption = format === "zip" || format === "seven-z";
 
   const addFiles = async (directory: boolean) => {
     const picked = await open({
@@ -65,8 +135,11 @@ export function CompressModal() {
       zip: "zip",
       "seven-z": "7z",
       "tar-gz": "tar.gz",
+      "tar-bz2": "tar.bz2",
+      "tar-xz": "tar.xz",
       "tar-zst": "tar.zst",
       tar: "tar",
+      dmg: "dmg",
     };
     const chosen = await save({
       defaultPath: outputPath || `archive.${extMap[format]}`,
@@ -75,41 +148,31 @@ export function CompressModal() {
     if (chosen) setOutputPath(chosen);
   };
 
-  const handleCompress = async () => {
+  const handleStart = () => {
     if (inputs.length === 0 || !outputPath.trim()) return;
-    setSubmitting(true);
-    try {
-      const res = await api.compressFiles({
-        inputPaths: inputs,
-        outputPath: outputPath.trim(),
-        format,
-        level,
-        password: format === "zip" && password.trim() ? password.trim() : undefined,
-        excludeJunk,
-      });
-      closeModal();
-      setPassword("");
-      showToast({
-        type: "success",
-        title: "压缩完成",
-        detail: `已打包 ${res.inputFiles} 个文件，体积 ${formatBytes(res.archiveBytes)}（耗时 ${(
-          res.elapsedMs / 1000
-        ).toFixed(2)}s）`,
-        actionPath: res.outputPath,
-      });
-    } catch (err) {
-      showToast({
-        type: "error",
-        title: "压缩失败",
-        detail: String(err),
-      });
-    } finally {
-      setSubmitting(false);
-    }
+    const opts: CompressOptions = {
+      inputPaths: inputs,
+      outputPath: outputPath.trim(),
+      format,
+      level,
+      password:
+        supportsEncryption && password.trim() ? password.trim() : undefined,
+      excludeJunk,
+    };
+    closeModal();
+    setPassword("");
+    onStartCompress(opts);
   };
 
+  const activeFormatMeta = FORMAT_OPTIONS.find((f) => f.value === format);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeModal();
+      }}
+    >
       <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
         {/* 头部 */}
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 dark:border-zinc-800">
@@ -156,7 +219,7 @@ export function CompressModal() {
             <div className="max-h-32 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50/70 p-2 dark:border-zinc-800 dark:bg-zinc-900/50">
               {inputs.length === 0 ? (
                 <p className="py-4 text-center text-xs text-zinc-400">
-                  点击右上角添加文件或文件夹
+                  点击右上角添加，或直接将文件 / 文件夹 / DMG 拖入此窗口
                 </p>
               ) : (
                 <ul className="space-y-1">
@@ -165,7 +228,10 @@ export function CompressModal() {
                       key={p}
                       className="flex items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs dark:bg-zinc-900"
                     >
-                      <span className="truncate text-zinc-700 dark:text-zinc-300" title={p}>
+                      <span
+                        className="truncate text-zinc-700 dark:text-zinc-300"
+                        title={p}
+                      >
                         {p}
                       </span>
                       <button
@@ -184,11 +250,18 @@ export function CompressModal() {
 
           {/* 格式选择 */}
           <div>
-            <label className="mb-2 block text-xs font-medium text-zinc-500">
-              目标格式
-            </label>
-            <div className="grid grid-cols-5 gap-2">
-              {FORMAT_OPTIONS.map((opt) => (
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs font-medium text-zinc-500">
+                目标格式
+              </label>
+              {activeFormatMeta && (
+                <span className="text-[11px] text-zinc-400">
+                  {activeFormatMeta.desc}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {availableFormats.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
@@ -235,7 +308,11 @@ export function CompressModal() {
               <div className="mb-1.5 flex items-center justify-between text-xs">
                 <span className="font-medium text-zinc-500">压缩等级</span>
                 <span className="font-mono text-zinc-700 dark:text-zinc-300">
-                  {level === 0 ? "仅存储" : level >= 8 ? `${level} (极限)` : `${level} (均衡)`}
+                  {level === 0
+                    ? "仅存储 / 极速"
+                    : level >= 8
+                    ? `${level} (极限)`
+                    : `${level} (均衡)`}
                 </span>
               </div>
               <input
@@ -252,14 +329,16 @@ export function CompressModal() {
             <div>
               <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-zinc-500">
                 <Lock className="h-3 w-3" />
-                <span>加密密码（ZIP AES-256 可选）</span>
+                <span>加密密码（ZIP / 7Z AES-256）</span>
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={format !== "zip"}
-                placeholder={format === "zip" ? "留空则不加密" : "当前格式不支持加密"}
+                disabled={!supportsEncryption}
+                placeholder={
+                  supportsEncryption ? "留空则不加密" : "当前格式不支持加密"
+                }
                 className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-800 outline-none focus:border-blue-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
               />
             </div>
@@ -289,11 +368,11 @@ export function CompressModal() {
           </button>
           <button
             type="button"
-            disabled={submitting || inputs.length === 0 || !outputPath.trim()}
-            onClick={handleCompress}
+            disabled={inputs.length === 0 || !outputPath.trim()}
+            onClick={handleStart}
             className="cursor-pointer rounded-xl bg-blue-600 px-5 py-2 text-xs font-medium text-white shadow-xs transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "正在压缩..." : "开始压缩"}
+            开始压缩
           </button>
         </div>
       </div>

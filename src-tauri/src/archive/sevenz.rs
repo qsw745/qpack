@@ -1,38 +1,91 @@
-use crate::archive::native::ProgressCallback;
+use crate::archive::task_control::ProgressTracker;
 use crate::error::{QPackError, QResult};
 use crate::models::{ArchiveEntry, ExtractOptions, ExtractResult};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::Instant;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
-/// 探测内置或系统安装的 7zz / 7z 可执行文件路径
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn new_hidden_command(bin: &Path) -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(bin);
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
+/// 探测内置或系统安装的 7zz / 7z 可执行文件路径（优先使用 QPack 内置静态引擎，开箱即用无需安装）
 pub fn find_sevenz_binary() -> Option<PathBuf> {
-    // 1. 优先检查应用同级 binaries 目录（打包 Sidecar 场景）
+    let names: &[&str] = if cfg!(windows) {
+        &["7z.exe", "7zz.exe"]
+    } else {
+        &["7zz", "7z"]
+    };
+
+    // 1. 优先检查应用包内嵌 binaries 目录（macOS Resources/binaries 与 Windows $INSTDIR/binaries）
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            for name in ["7zz", "7zz.exe", "7z", "7z.exe"] {
-                let candidate = dir.join(name);
-                if candidate.is_file() {
-                    return Some(candidate);
-                }
-                let nested = dir.join("binaries").join(name);
-                if nested.is_file() {
-                    return Some(nested);
+            let mut search_dirs = vec![
+                dir.join("binaries"),
+                dir.join("resources").join("binaries"),
+                dir.to_path_buf(),
+            ];
+
+            // macOS .app/Contents/MacOS/qpack -> ../Resources/binaries/7zz
+            if let Some(contents_dir) = dir.parent() {
+                search_dirs.insert(0, contents_dir.join("Resources").join("binaries"));
+                search_dirs.push(contents_dir.join("Resources"));
+            }
+
+            for base in search_dirs {
+                for name in names {
+                    let candidate = base.join(name);
+                    if candidate.is_file() {
+                        return Some(candidate);
+                    }
                 }
             }
         }
     }
 
-    // 2. 检查系统 PATH 中的 7zz / 7z
+    // 2. 开发与单元测试环境：检查源码树内嵌目录 src-tauri/binaries/{macos,windows}
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dev_sub = if cfg!(windows) {
+        manifest_dir.join("binaries").join("windows")
+    } else {
+        manifest_dir.join("binaries").join("macos")
+    };
+    for name in names {
+        let candidate = dev_sub.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // 3. 回退检查系统 PATH 中的 7zz / 7z
     let candidates = if cfg!(windows) {
-        vec!["7zz.exe", "7z.exe"]
+        vec!["7z.exe", "7zz.exe"]
     } else {
         vec!["7zz", "7z", "/opt/homebrew/bin/7zz", "/usr/local/bin/7zz"]
     };
 
     for bin in candidates {
-        if Command::new(bin).arg("--help").output().is_ok() {
+        if new_hidden_command(Path::new(bin))
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok()
+        {
             return Some(PathBuf::from(bin));
         }
     }
@@ -40,15 +93,13 @@ pub fn find_sevenz_binary() -> Option<PathBuf> {
     None
 }
 
-/// 使用 7zz -slt 解析压缩包条目列表（用于 RAR / ISO / DMG / CAB 等格式）
+/// 使用内置 7-Zip 引擎 (-slt) 解析压缩包条目列表（支持 RAR / ISO / CAB / DMG / WIM / RPM / DEB / LZH / ARJ 等 40+ 格式）
 pub fn inspect_with_sevenz_cli(path: &Path, password: Option<&str>) -> QResult<Vec<ArchiveEntry>> {
     let bin = find_sevenz_binary().ok_or_else(|| {
-        QPackError::EngineUnavailable(
-            "未检测到 7zz 引擎。请安装 7-Zip (macOS: brew install sevenzip) 或将 7zz 放入应用 binaries 目录".into(),
-        )
+        QPackError::EngineUnavailable("未检测到内置 7-Zip 扩展引擎，请重新安装 QPack".into())
     })?;
 
-    let mut cmd = Command::new(&bin);
+    let mut cmd = new_hidden_command(&bin);
     cmd.args(["l", "-slt", "-ba", "-sccUTF-8"]);
     if let Some(pwd) = password.filter(|p| !p.is_empty()) {
         cmd.arg(format!("-p{}", pwd));
@@ -60,7 +111,8 @@ pub fn inspect_with_sevenz_cli(path: &Path, password: Option<&str>) -> QResult<V
     let output = cmd.output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.to_lowercase().contains("wrong password") {
+        let lower = stderr.to_lowercase();
+        if lower.contains("wrong password") || lower.contains("can not open encrypted archive") {
             return Err(QPackError::InvalidPassword);
         }
         return Err(QPackError::ArchiveError(stderr.trim().to_string()));
@@ -150,24 +202,43 @@ pub fn inspect_with_sevenz_cli(path: &Path, password: Option<&str>) -> QResult<V
     Ok(entries)
 }
 
-/// 使用 7zz 命令行解压（支持 RAR / ISO / DMG / CAB 及部分提取）
+/// 使用内置 7-Zip 引擎解压（支持 RAR / ISO / CAB / DMG / WIM / RPM / DEB 等及中途取消）
 pub fn extract_with_sevenz_cli(
     archive_path: &Path,
     output_dir: &Path,
     options: &ExtractOptions,
-    on_progress: ProgressCallback<'_>,
+    tracker: &mut ProgressTracker,
 ) -> QResult<ExtractResult> {
     let started = Instant::now();
     let bin = find_sevenz_binary().ok_or_else(|| {
-        QPackError::EngineUnavailable(
-            "未检测到 7zz 引擎。请安装 7-Zip (macOS: brew install sevenzip) 或将 7zz 放入应用 binaries 目录".into(),
-        )
+        QPackError::EngineUnavailable("未检测到内置 7-Zip 扩展引擎，请重新安装 QPack".into())
     })?;
 
-    fs::create_dir_all(output_dir)?;
-    on_progress("正在调用 7zz 引擎解压...", 0, 100);
+    // 预估条目数与总大小，供进度弹窗完成后展示准确摘要
+    let (est_files, est_bytes) = inspect_with_sevenz_cli(archive_path, options.password.as_deref())
+        .map(|list| {
+            let mut files = 0usize;
+            let mut bytes = 0u64;
+            for e in list {
+                if !e.is_dir {
+                    files += 1;
+                    bytes = bytes.saturating_add(e.size);
+                }
+            }
+            (files, bytes)
+        })
+        .unwrap_or((0, 0));
 
-    let mut cmd = Command::new(&bin);
+    fs::create_dir_all(output_dir)?;
+    let archive_name = archive_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("archive");
+    tracker.set_totals(est_files.max(1), est_bytes);
+    tracker.checkpoint()?;
+    tracker.begin_file(&format!("正在解压 {}...", archive_name), est_bytes);
+
+    let mut cmd = new_hidden_command(&bin);
     cmd.arg("x");
     cmd.arg(if options.overwrite { "-aoa" } else { "-aos" });
     cmd.arg("-y");
@@ -185,21 +256,43 @@ pub fn extract_with_sevenz_cli(
         }
     }
 
-    let output = cmd.output()?;
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn()?;
+
+    loop {
+        if tracker.is_cancelled() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(QPackError::Cancelled);
+        }
+        if child.try_wait()?.is_some() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(80));
+    }
+
+    let output = child.wait_with_output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.to_lowercase().contains("wrong password") {
+        let lower = stderr.to_lowercase();
+        if lower.contains("wrong password")
+            || lower.contains("can not open encrypted archive")
+            || lower.contains("data error in encrypted file")
+        {
             return Err(QPackError::InvalidPassword);
         }
         return Err(QPackError::ArchiveError(stderr.trim().to_string()));
     }
 
-    on_progress("解压完成", 100, 100);
+    tracker.finish_file();
+    tracker.finish();
 
     Ok(ExtractResult {
         output_dir: output_dir.to_string_lossy().into_owned(),
-        extracted_files: 0,
-        total_bytes: 0,
+        extracted_files: est_files,
+        total_bytes: est_bytes,
         elapsed_ms: started.elapsed().as_millis() as u64,
+        primary_target: None,
+        primary_target_is_dir: true,
     })
 }

@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 $BaseUrl = if ($env:QPACK_BASE_URL) { $env:QPACK_BASE_URL.TrimEnd("/") } else { "http://192.168.31.147:8080" }
-$Version = if ($env:QPACK_VERSION) { $env:QPACK_VERSION } else { "0.1.2" }
+$Version = if ($env:QPACK_VERSION) { $env:QPACK_VERSION } else { "0.1.7" }
 $InstallerName = "QPack_${Version}_x64-setup.exe"
 $DownloadUrl = "${BaseUrl}/releases/${InstallerName}"
 $TempFile = Join-Path $env:TEMP $InstallerName

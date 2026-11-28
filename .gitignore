@@ -18,6 +18,7 @@ website/releases/*.exe
 website/releases/*.msi
 website/releases/*.tar.gz
 website/releases/*.sig
+*.msix
 
 # OS files
 .DS_Store

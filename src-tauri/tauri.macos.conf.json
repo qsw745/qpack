@@ -1,0 +1,16 @@
+{
+  "bundle": {
+    "macOS": {
+      "files": {
+        "Resources/binaries/7zz": "./binaries/macos/7zz",
+        "Resources/file-zip.icns": "./icons/file-types/file-zip.icns",
+        "Resources/file-7z.icns": "./icons/file-types/file-7z.icns",
+        "Resources/file-rar.icns": "./icons/file-types/file-rar.icns",
+        "Resources/file-tar.icns": "./icons/file-types/file-tar.icns",
+        "Resources/file-gz.icns": "./icons/file-types/file-gz.icns",
+        "Resources/file-zst.icns": "./icons/file-types/file-zst.icns",
+        "Resources/file-archive.icns": "./icons/file-types/file-archive.icns"
+      }
+    }
+  }
+}

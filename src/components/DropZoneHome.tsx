@@ -78,30 +78,31 @@ export function DropZoneHome({
       </div>
 
       {/* 底部引擎与支持格式状态 */}
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-400 dark:text-zinc-500">
-        <span>支持格式：</span>
-        {(
-          engineStatus?.supportedReadFormats ?? [
-            "zip",
-            "7z",
-            "tar.gz",
-            "tar.zst",
-            "tar.xz",
-            "gz",
-          ]
-        )
-          .slice(0, 12)
-          .map((fmt) => (
-            <span
-              key={fmt}
-              className="rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-600 uppercase dark:bg-zinc-900 dark:text-zinc-400"
-            >
-              {fmt}
-            </span>
-          ))}
-        {engineStatus && !engineStatus.sevenzCliReady && (
-          <span className="ml-1 text-amber-600/80 dark:text-amber-400/80">
-            （安装 7zz 后可额外支持 RAR / ISO / DMG）
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
+        <span>开箱支持：</span>
+        {[
+          "zip",
+          "7z",
+          "rar",
+          "tar.gz",
+          "tar.zst",
+          "tar.xz",
+          "tar.bz2",
+          "iso",
+          "dmg",
+          "cab",
+          "wim",
+        ].map((fmt) => (
+          <span
+            key={fmt}
+            className="rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-600 uppercase dark:bg-zinc-900 dark:text-zinc-400"
+          >
+            {fmt}
+          </span>
+        ))}
+        {engineStatus?.sevenzCliReady && (
+          <span className="ml-1 text-emerald-600 dark:text-emerald-400">
+            · 双引擎已内置（免装 7-Zip）
           </span>
         )}
       </div>

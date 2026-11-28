@@ -1,6 +1,6 @@
 [package]
 name = "qpack"
-version = "0.1.2"
+version = "0.1.7"
 description = "QPack - 极简、高性能、跨平台解压缩工具"
 authors = ["QPack"]
 edition = "2021"
@@ -33,7 +33,7 @@ tar = "0.4"
 zstd = "0.13"
 bzip2 = "0.5"
 xz2 = "0.1"
-sevenz-rust = "0.6"
+sevenz-rust = { version = "0.6", features = ["compress", "aes256"] }
 
 # 编码检测与转换（防跨平台中文乱码）
 encoding_rs = "0.8"

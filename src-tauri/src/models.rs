@@ -20,6 +20,12 @@ pub enum ArchiveFormat {
     Iso,
     Cab,
     Dmg,
+    Wim,
+    Rpm,
+    Deb,
+    Lzh,
+    Arj,
+    Cpio,
     Unknown,
 }
 
@@ -63,6 +69,12 @@ impl ArchiveFormat {
             "iso" => Self::Iso,
             "cab" => Self::Cab,
             "dmg" => Self::Dmg,
+            "wim" | "esd" => Self::Wim,
+            "rpm" => Self::Rpm,
+            "deb" => Self::Deb,
+            "lzh" | "lha" => Self::Lzh,
+            "arj" => Self::Arj,
+            "cpio" => Self::Cpio,
             _ => Self::Unknown,
         }
     }
@@ -84,6 +96,12 @@ impl ArchiveFormat {
             Self::Iso => "ISO",
             Self::Cab => "CAB",
             Self::Dmg => "DMG",
+            Self::Wim => "WIM",
+            Self::Rpm => "RPM",
+            Self::Deb => "DEB",
+            Self::Lzh => "LZH",
+            Self::Arj => "ARJ",
+            Self::Cpio => "CPIO",
             Self::Unknown => "未知格式",
         }
     }
@@ -94,7 +112,7 @@ impl ArchiveFormat {
         for suffix in &[
             ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst", ".tgz", ".tbz2", ".tbz", ".txz",
             ".tzst", ".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".xz", ".zst", ".zstd", ".iso",
-            ".cab", ".dmg",
+            ".cab", ".dmg", ".wim", ".esd", ".rpm", ".deb", ".lzh", ".lha", ".arj", ".cpio",
         ] {
             if lower.ends_with(suffix) && file_name.len() > suffix.len() {
                 return file_name[..file_name.len() - suffix.len()].to_string();
@@ -147,8 +165,20 @@ pub struct ArchiveInfo {
     pub entries: Vec<ArchiveEntry>,
 }
 
+/// 解压目标目录模式（对应 Bandizip 的“智能解压 / 解压到此处 / 解压到同名文件夹”）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExtractMode {
+    /// 智能判断：包内只有单个顶层目录则直接展开，否则新建同名文件夹
+    Smart,
+    /// 直接解压到目标目录
+    Here,
+    /// 强制解压到以压缩包命名的子文件夹
+    Subfolder,
+}
+
 /// 解压请求参数
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtractOptions {
     pub archive_path: String,
@@ -163,6 +193,12 @@ pub struct ExtractOptions {
     pub selected_paths: Option<Vec<String>>,
     /// 是否覆盖已存在文件
     pub overwrite: bool,
+    /// 解压目标目录模式（缺省时由 `smart_extract` 推导）
+    #[serde(default)]
+    pub extract_mode: Option<ExtractMode>,
+    /// 任务 ID（用于暂停 / 取消控制）
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 /// 解压结果摘要
@@ -173,21 +209,30 @@ pub struct ExtractResult {
     pub extracted_files: usize,
     pub total_bytes: u64,
     pub elapsed_ms: u64,
+    /// 解压完成后最适合在文件管理器中定位的目标（新建的专属目录 / 唯一顶层条目 / 输出目录）
+    #[serde(default)]
+    pub primary_target: Option<String>,
+    #[serde(default)]
+    pub primary_target_is_dir: bool,
 }
 
 /// 压缩目标格式
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CompressFormat {
+    #[default]
     Zip,
     SevenZ,
     TarGz,
+    TarBz2,
+    TarXz,
     TarZst,
     Tar,
+    Dmg,
 }
 
 /// 压缩请求参数
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompressOptions {
     pub input_paths: Vec<String>,
@@ -199,6 +244,9 @@ pub struct CompressOptions {
     pub password: Option<String>,
     /// 是否自动排除 .DS_Store / __MACOSX / Thumbs.db
     pub exclude_junk: bool,
+    /// 任务 ID（用于暂停 / 取消控制）
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 /// 压缩结果摘要
@@ -221,7 +269,15 @@ pub struct TaskProgress {
     pub current_file: String,
     pub processed_items: usize,
     pub total_items: usize,
+    pub processed_bytes: u64,
+    pub total_bytes: u64,
+    pub current_file_bytes: u64,
+    pub current_file_total_bytes: u64,
+    pub current_file_percent: f64,
     pub percent: f64,
+    pub elapsed_ms: u64,
+    pub speed_bps: f64,
+    pub paused: bool,
     pub done: bool,
 }
 

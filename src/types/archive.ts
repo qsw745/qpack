@@ -1,4 +1,24 @@
-export type CompressFormat = "zip" | "seven-z" | "tar-gz" | "tar-zst" | "tar";
+export type CompressFormat =
+  | "zip"
+  | "seven-z"
+  | "tar-gz"
+  | "tar-bz2"
+  | "tar-xz"
+  | "tar-zst"
+  | "tar"
+  | "dmg";
+
+export type ExtractMode = "smart" | "here" | "subfolder";
+
+export type LaunchMode =
+  | "open"
+  | "extract-smart"
+  | "extract-here"
+  | "extract-subfolder"
+  | "extract-to"
+  | "compress-zip"
+  | "compress-7z"
+  | "compress-dialog";
 
 export interface ArchiveEntry {
   path: string;
@@ -36,6 +56,8 @@ export interface ExtractOptions {
   encoding?: string;
   selectedPaths?: string[];
   overwrite: boolean;
+  extractMode?: ExtractMode;
+  taskId?: string;
 }
 
 export interface ExtractResult {
@@ -43,6 +65,8 @@ export interface ExtractResult {
   extractedFiles: number;
   totalBytes: number;
   elapsedMs: number;
+  primaryTarget?: string | null;
+  primaryTargetIsDir?: boolean;
 }
 
 export interface ExtractConflictInfo {
@@ -53,7 +77,8 @@ export interface ExtractConflictInfo {
 
 export interface PendingLaunchPayload {
   paths: string[];
-  autoExtract: boolean;
+  mode: LaunchMode;
+  standalone: boolean;
 }
 
 export interface CompressOptions {
@@ -63,6 +88,7 @@ export interface CompressOptions {
   level: number;
   password?: string;
   excludeJunk: boolean;
+  taskId?: string;
 }
 
 export interface CompressResult {
@@ -79,8 +105,46 @@ export interface TaskProgress {
   currentFile: string;
   processedItems: number;
   totalItems: number;
+  processedBytes: number;
+  totalBytes: number;
+  currentFileBytes: number;
+  currentFileTotalBytes: number;
+  currentFilePercent: number;
   percent: number;
+  elapsedMs: number;
+  speedBps: number;
+  paused: boolean;
   done: boolean;
+}
+
+export type TaskStatus =
+  | "running"
+  | "paused"
+  | "completed"
+  | "cancelled"
+  | "error";
+
+export interface ActiveTask {
+  taskId: string;
+  kind: "extract" | "compress";
+  title: string;
+  archivePath: string;
+  destDir: string;
+  primaryTarget?: string | null;
+  primaryTargetIsDir?: boolean;
+  standaloneWindow: boolean;
+  status: TaskStatus;
+  progress: TaskProgress;
+  openFolderAfterDone: boolean;
+  autoCloseAfterDone: boolean;
+  deleteSourceAfterExtract: boolean;
+  summary?: string;
+  errorMessage?: string;
+  extractedFiles?: number;
+  inputFiles?: number;
+  originalBytes?: number;
+  archiveBytes?: number;
+  elapsedMs?: number;
 }
 
 export interface EngineStatus {
@@ -97,7 +161,21 @@ export interface AppSettings {
   doubleClickAction: DoubleClickAction;
   closeToTray: boolean;
   excludeJunk: boolean;
+  openFolderAfterExtract: boolean;
+  openFolderAfterCompress: boolean;
+  autoCloseProgressWindow: boolean;
+  defaultCompressFormat: CompressFormat;
 }
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  doubleClickAction: "browse",
+  closeToTray: true,
+  excludeJunk: true,
+  openFolderAfterExtract: true,
+  openFolderAfterCompress: false,
+  autoCloseProgressWindow: false,
+  defaultCompressFormat: "zip",
+};
 
 export interface SystemIntegrationStatus {
   platform: string;

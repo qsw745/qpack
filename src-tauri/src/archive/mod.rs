@@ -1,16 +1,27 @@
+pub mod dmg;
 pub mod encoding;
 pub mod native;
 pub mod sevenz;
 pub mod smart;
+pub mod task_control;
 
-use crate::archive::native::ProgressCallback;
+use crate::archive::task_control::{ProgressCallback, ProgressTracker, TaskController};
 use crate::error::{QPackError, QResult};
 use crate::models::{
-    ArchiveFormat, ArchiveInfo, CompressOptions, CompressResult, EngineStatus, ExtractOptions,
-    ExtractResult,
+    ArchiveFormat, ArchiveInfo, CompressOptions, CompressResult, EngineStatus, ExtractMode,
+    ExtractOptions, ExtractResult,
 };
 use std::fs;
 use std::path::Path;
+
+/// 根据 ExtractOptions 推导最终的 ExtractMode
+pub fn effective_extract_mode(options: &ExtractOptions) -> ExtractMode {
+    options.extract_mode.unwrap_or(if options.smart_extract {
+        ExtractMode::Smart
+    } else {
+        ExtractMode::Here
+    })
+}
 
 /// 探测当前可用引擎与支持格式
 pub fn get_engine_status() -> EngineStatus {
@@ -23,12 +34,31 @@ pub fn get_engine_status() -> EngineStatus {
     .map(String::from)
     .collect::<Vec<_>>();
 
+    if cfg!(target_os = "macos") {
+        read_formats.push("dmg".into());
+    }
+
     if sevenz_bin.is_some() {
-        read_formats.extend(
-            ["rar", "iso", "cab", "dmg"]
-                .into_iter()
-                .map(String::from),
-        );
+        for ext in [
+            "rar", "iso", "cab", "dmg", "wim", "rpm", "deb", "lzh", "arj", "cpio",
+        ] {
+            if !read_formats.iter().any(|f| f == ext) {
+                read_formats.push(ext.into());
+            }
+        }
+    }
+
+    let mut write_formats = vec![
+        "zip".into(),
+        "7z".into(),
+        "tar.zst".into(),
+        "tar.gz".into(),
+        "tar.xz".into(),
+        "tar.bz2".into(),
+        "tar".into(),
+    ];
+    if cfg!(target_os = "macos") {
+        write_formats.push("dmg".into());
     }
 
     EngineStatus {
@@ -36,13 +66,7 @@ pub fn get_engine_status() -> EngineStatus {
         sevenz_cli_ready: sevenz_bin.is_some(),
         sevenz_cli_path: sevenz_bin.map(|p| p.to_string_lossy().into_owned()),
         supported_read_formats: read_formats,
-        supported_write_formats: vec![
-            "zip".into(),
-            "7z".into(),
-            "tar.gz".into(),
-            "tar.zst".into(),
-            "tar".into(),
-        ],
+        supported_write_formats: write_formats,
     }
 }
 
@@ -67,10 +91,14 @@ pub fn inspect_archive(
         .to_string();
 
     let (entries, detected_encoding, engine) = match format {
-        ArchiveFormat::Zip => {
-            let (e, enc) = native::inspect_zip(archive_path, override_encoding)?;
-            (e, enc, "Rust 原生引擎".to_string())
-        }
+        ArchiveFormat::Zip => match native::inspect_zip(archive_path, override_encoding) {
+            Ok((e, enc)) => (e, enc, "Rust 原生引擎".to_string()),
+            Err(_) if sevenz::find_sevenz_binary().is_some() => {
+                let e = sevenz::inspect_with_sevenz_cli(archive_path, password)?;
+                (e, "UTF-8".to_string(), "内置 7-Zip 引擎".to_string())
+            }
+            Err(err) => return Err(err),
+        },
         ArchiveFormat::Tar
         | ArchiveFormat::TarGz
         | ArchiveFormat::TarBz2
@@ -85,15 +113,36 @@ pub fn inspect_archive(
         }
         ArchiveFormat::SevenZ => match native::inspect_sevenz_native(archive_path, password) {
             Ok((e, enc)) => (e, enc, "Rust 原生引擎 (7z)".to_string()),
+            Err(QPackError::InvalidPassword) => return Err(QPackError::InvalidPassword),
             Err(_) if sevenz::find_sevenz_binary().is_some() => {
                 let e = sevenz::inspect_with_sevenz_cli(archive_path, password)?;
-                (e, "UTF-8".to_string(), "7zz 引擎".to_string())
+                (e, "UTF-8".to_string(), "内置 7-Zip 引擎".to_string())
             }
             Err(err) => return Err(err),
         },
-        ArchiveFormat::Rar | ArchiveFormat::Iso | ArchiveFormat::Cab | ArchiveFormat::Dmg => {
+        ArchiveFormat::Dmg => {
+            #[cfg(target_os = "macos")]
+            {
+                let e = dmg::inspect_dmg_macos(archive_path)?;
+                (e, "UTF-8".to_string(), "macOS 原生 DMG 引擎".to_string())
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let e = sevenz::inspect_with_sevenz_cli(archive_path, password)?;
+                (e, "UTF-8".to_string(), "内置 7-Zip 引擎".to_string())
+            }
+        }
+        ArchiveFormat::Rar
+        | ArchiveFormat::Iso
+        | ArchiveFormat::Cab
+        | ArchiveFormat::Wim
+        | ArchiveFormat::Rpm
+        | ArchiveFormat::Deb
+        | ArchiveFormat::Lzh
+        | ArchiveFormat::Arj
+        | ArchiveFormat::Cpio => {
             let e = sevenz::inspect_with_sevenz_cli(archive_path, password)?;
-            (e, "UTF-8".to_string(), "7zz 引擎".to_string())
+            (e, "UTF-8".to_string(), "内置 7-Zip 引擎".to_string())
         }
         ArchiveFormat::Unknown => {
             return Err(QPackError::UnsupportedFormat(file_name));
@@ -186,16 +235,17 @@ pub fn check_extract_conflict(options: &ExtractOptions) -> QResult<ExtractConfli
         .unwrap_or(false);
 
     let dest_root = Path::new(&options.dest_dir);
-    let output_dir = smart::resolve_extract_output_dir(
+    let mode = effective_extract_mode(options);
+    let (output_dir, created_subfolder) = smart::resolve_extract_output_dir_with_mode(
         archive_path,
         dest_root,
         &info.entries,
-        options.smart_extract,
+        mode,
         has_selection,
     );
 
-    // 情况 1：智能解压新建了专属目录（output_dir != dest_root）
-    if output_dir != dest_root {
+    // 情况 1：新建了专属目录（output_dir != dest_root）
+    if created_subfolder && output_dir != dest_root {
         let has_conflict = output_dir.exists();
         let suggested = next_available_dir(&output_dir);
         return Ok(ExtractConflictInfo {
@@ -206,13 +256,14 @@ pub fn check_extract_conflict(options: &ExtractOptions) -> QResult<ExtractConfli
     }
 
     // 情况 2：直接展开到 dest_root，检查待解压的顶层条目是否已存在
-    let selection = options.selected_paths.as_ref();
+    let selection = smart::build_selection_set(&options.selected_paths);
     let mut first_conflict: Option<std::path::PathBuf> = None;
     for entry in &info.entries {
-        if let Some(sel) = selection {
-            if !sel.is_empty() && !sel.iter().any(|s| entry.path == *s || entry.path.starts_with(&format!("{}/", s.trim_end_matches('/')))) {
-                continue;
-            }
+        if smart::is_system_junk(&entry.path) {
+            continue;
+        }
+        if !smart::matches_selection(&entry.path, &selection) {
+            continue;
         }
         let clean = entry.path.trim_start_matches('/').trim_end_matches('/');
         if clean.is_empty() {
@@ -247,9 +298,10 @@ pub fn check_extract_conflict(options: &ExtractOptions) -> QResult<ExtractConfli
     }
 }
 
-/// 统一入口：执行压缩包解压（含智能目录规划）
+/// 统一入口：执行压缩包解压（含模式目录规划、任务控制与主要定位目标解析）
 pub fn extract_archive(
     options: &ExtractOptions,
+    control: TaskController,
     on_progress: ProgressCallback<'_>,
 ) -> QResult<ExtractResult> {
     let archive_path = Path::new(&options.archive_path);
@@ -269,63 +321,146 @@ pub fn extract_archive(
         .map(|v| !v.is_empty())
         .unwrap_or(false);
 
-    let output_dir = smart::resolve_extract_output_dir(
+    let mode = effective_extract_mode(options);
+    let (output_dir, created_subfolder) = smart::resolve_extract_output_dir_with_mode(
         archive_path,
         Path::new(&options.dest_dir),
         &info.entries,
-        options.smart_extract,
+        mode,
         has_selection,
     );
 
-    match info.format {
-        ArchiveFormat::Zip => native::extract_zip(archive_path, &output_dir, options, on_progress),
+    let mut tracker = ProgressTracker::new(control, on_progress);
+
+    let mut result = match info.format {
+        ArchiveFormat::Zip => {
+            if info.engine.contains("7-Zip") {
+                sevenz::extract_with_sevenz_cli(archive_path, &output_dir, options, &mut tracker)
+            } else {
+                match native::extract_zip(archive_path, &output_dir, options, &mut tracker) {
+                    Ok(r) => Ok(r),
+                    Err(e @ QPackError::InvalidPassword) | Err(e @ QPackError::Cancelled) => Err(e),
+                    Err(_) if sevenz::find_sevenz_binary().is_some() => {
+                        sevenz::extract_with_sevenz_cli(
+                            archive_path,
+                            &output_dir,
+                            options,
+                            &mut tracker,
+                        )
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+        }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGz
         | ArchiveFormat::TarBz2
         | ArchiveFormat::TarXz
-        | ArchiveFormat::TarZst => {
-            native::extract_tar(archive_path, info.format, &output_dir, options, on_progress)
-        }
+        | ArchiveFormat::TarZst => native::extract_tar(
+            archive_path,
+            info.format,
+            &output_dir,
+            options,
+            &mut tracker,
+        ),
         ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst => {
             native::extract_single_stream(
                 archive_path,
                 info.format,
                 &output_dir,
                 options,
-                on_progress,
+                &mut tracker,
             )
         }
         ArchiveFormat::SevenZ => {
-            if info.engine.contains("7zz") {
-                sevenz::extract_with_sevenz_cli(archive_path, &output_dir, options, on_progress)
+            if info.engine.contains("7-Zip") {
+                sevenz::extract_with_sevenz_cli(archive_path, &output_dir, options, &mut tracker)
             } else {
-                native::extract_sevenz_native(archive_path, &output_dir, options, on_progress)
+                match native::extract_sevenz_native(archive_path, &output_dir, options, &mut tracker)
+                {
+                    Ok(r) => Ok(r),
+                    Err(e @ QPackError::InvalidPassword) | Err(e @ QPackError::Cancelled) => Err(e),
+                    Err(_) if sevenz::find_sevenz_binary().is_some() => {
+                        sevenz::extract_with_sevenz_cli(
+                            archive_path,
+                            &output_dir,
+                            options,
+                            &mut tracker,
+                        )
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
-        ArchiveFormat::Rar | ArchiveFormat::Iso | ArchiveFormat::Cab | ArchiveFormat::Dmg => {
-            sevenz::extract_with_sevenz_cli(archive_path, &output_dir, options, on_progress)
+        ArchiveFormat::Dmg => {
+            #[cfg(target_os = "macos")]
+            {
+                dmg::extract_dmg_macos(archive_path, &output_dir, options, &mut tracker)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                sevenz::extract_with_sevenz_cli(archive_path, &output_dir, options, &mut tracker)
+            }
+        }
+        ArchiveFormat::Rar
+        | ArchiveFormat::Iso
+        | ArchiveFormat::Cab
+        | ArchiveFormat::Wim
+        | ArchiveFormat::Rpm
+        | ArchiveFormat::Deb
+        | ArchiveFormat::Lzh
+        | ArchiveFormat::Arj
+        | ArchiveFormat::Cpio => {
+            sevenz::extract_with_sevenz_cli(archive_path, &output_dir, options, &mut tracker)
         }
         ArchiveFormat::Unknown => Err(QPackError::UnsupportedFormat(info.file_name)),
-    }
+    }?;
+
+    let (primary_target, primary_target_is_dir) = smart::resolve_primary_target(
+        &output_dir,
+        created_subfolder,
+        &info.entries,
+        &options.selected_paths,
+    );
+    result.primary_target = primary_target;
+    result.primary_target_is_dir = primary_target_is_dir;
+
+    Ok(result)
 }
 
 /// 统一入口：执行压缩
 pub fn compress_files(
     options: &CompressOptions,
+    control: TaskController,
     on_progress: ProgressCallback<'_>,
 ) -> QResult<CompressResult> {
-    native::compress_native(options, on_progress)
+    let mut tracker = ProgressTracker::new(control, on_progress);
+    if options.format == crate::models::CompressFormat::Dmg {
+        #[cfg(target_os = "macos")]
+        {
+            return dmg::compress_dmg_macos(options, &mut tracker);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            return Err(QPackError::UnsupportedFormat(
+                "仅 macOS 支持创建 DMG 磁盘映像".into(),
+            ));
+        }
+    }
+    native::compress_native(options, &mut tracker)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::archive::task_control::ProgressSnapshot;
     use crate::models::{ArchiveEntry, CompressFormat};
     use std::fs;
     use std::path::PathBuf;
 
     fn temp_workspace(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("qpack_test_{}_{}", name, uuid::Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("qpack_test_{}_{}", name, uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -426,13 +561,15 @@ mod tests {
         let formats = [
             (CompressFormat::Zip, "out.zip"),
             (CompressFormat::TarGz, "out.tar.gz"),
+            (CompressFormat::TarBz2, "out.tar.bz2"),
+            (CompressFormat::TarXz, "out.tar.xz"),
             (CompressFormat::TarZst, "out.tar.zst"),
             (CompressFormat::SevenZ, "out.7z"),
         ];
 
         for (fmt, filename) in formats {
             let out_arc = work.join(filename);
-            let mut noop = |_: &str, _: usize, _: usize| {};
+            let mut noop = |_: &ProgressSnapshot| {};
             let comp = compress_files(
                 &CompressOptions {
                     input_paths: vec![src_dir.to_string_lossy().into_owned()],
@@ -441,7 +578,9 @@ mod tests {
                     level: 6,
                     password: None,
                     exclude_junk: true,
+                    task_id: None,
                 },
+                TaskController::noop(),
                 &mut noop,
             )
             .expect("压缩应成功");
@@ -464,17 +603,216 @@ mod tests {
                     encoding: None,
                     selected_paths: None,
                     overwrite: true,
+                    extract_mode: Some(ExtractMode::Smart),
+                    task_id: None,
                 },
+                TaskController::noop(),
                 &mut noop,
             )
             .expect("解压应成功");
 
             assert!(res.extracted_files >= 2);
+            assert!(res.primary_target.is_some());
+            assert!(res.primary_target_is_dir);
             let content = fs::read_to_string(extract_dir.join("source/hello.txt")).unwrap();
             assert_eq!(content, "你好 QPack!");
         }
 
         let _ = fs::remove_dir_all(&work);
     }
-}
 
+    #[test]
+    fn test_7z_aes256_encryption_and_wrong_password() {
+        let work = temp_workspace("7z_aes");
+        let src = work.join("secret.txt");
+        fs::write(&src, "绝密数据 QPack 7z AES-256").unwrap();
+
+        let out_7z = work.join("secret.7z");
+        let mut noop = |_: &ProgressSnapshot| {};
+        compress_files(
+            &CompressOptions {
+                input_paths: vec![src.to_string_lossy().into_owned()],
+                output_path: out_7z.to_string_lossy().into_owned(),
+                format: CompressFormat::SevenZ,
+                level: 5,
+                password: Some("qpack-pass-123".into()),
+                exclude_junk: true,
+                task_id: None,
+            },
+            TaskController::noop(),
+            &mut noop,
+        )
+        .expect("加密 7z 压缩应成功");
+
+        // 加密 7z 可浏览目录并标记为已加密，但无密码或错密码解压应返回 InvalidPassword
+        let info = inspect_archive(&out_7z, None, None).expect("应能读取加密 7z 的条目信息");
+        assert!(info.is_encrypted, "加密 7z 应标记 is_encrypted = true");
+
+        let ext_bad = work.join("out_bad");
+        let err_no_pwd = extract_archive(
+            &ExtractOptions {
+                archive_path: out_7z.to_string_lossy().into_owned(),
+                dest_dir: ext_bad.to_string_lossy().into_owned(),
+                smart_extract: false,
+                password: None,
+                encoding: None,
+                selected_paths: None,
+                overwrite: true,
+                extract_mode: Some(ExtractMode::Here),
+                task_id: None,
+            },
+            TaskController::noop(),
+            &mut noop,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err_no_pwd, QPackError::InvalidPassword),
+            "无密码解压加密 7z 应返回 InvalidPassword，实际: {:?}",
+            err_no_pwd
+        );
+
+        let err_bad_pwd = extract_archive(
+            &ExtractOptions {
+                archive_path: out_7z.to_string_lossy().into_owned(),
+                dest_dir: ext_bad.to_string_lossy().into_owned(),
+                smart_extract: false,
+                password: Some("wrong".into()),
+                encoding: None,
+                selected_paths: None,
+                overwrite: true,
+                extract_mode: Some(ExtractMode::Here),
+                task_id: None,
+            },
+            TaskController::noop(),
+            &mut noop,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err_bad_pwd, QPackError::InvalidPassword),
+            "错密码解压加密 7z 应返回 InvalidPassword，实际: {:?}",
+            err_bad_pwd
+        );
+
+        // 正确密码可正常解析与解压
+        let ext_dir = work.join("out");
+        let res = extract_archive(
+            &ExtractOptions {
+                archive_path: out_7z.to_string_lossy().into_owned(),
+                dest_dir: ext_dir.to_string_lossy().into_owned(),
+                smart_extract: false,
+                password: Some("qpack-pass-123".into()),
+                encoding: None,
+                selected_paths: None,
+                overwrite: true,
+                extract_mode: Some(ExtractMode::Here),
+                task_id: None,
+            },
+            TaskController::noop(),
+            &mut noop,
+        )
+        .expect("正确密码解压 7z 应成功");
+
+        assert_eq!(res.extracted_files, 1);
+        assert!(!res.primary_target_is_dir);
+        let content = fs::read_to_string(ext_dir.join("secret.txt")).unwrap();
+        assert_eq!(content, "绝密数据 QPack 7z AES-256");
+
+        let _ = fs::remove_dir_all(&work);
+    }
+
+    #[test]
+    fn test_cancel_compress_cleans_partial_output() {
+        let work = temp_workspace("cancel_clean");
+        let src = work.join("big.bin");
+        fs::write(&src, vec![42u8; 256 * 1024]).unwrap();
+
+        let out_zip = work.join("aborted.zip");
+        let control = TaskController::new();
+        control.cancel();
+
+        let mut noop = |_: &ProgressSnapshot| {};
+        let err = compress_files(
+            &CompressOptions {
+                input_paths: vec![src.to_string_lossy().into_owned()],
+                output_path: out_zip.to_string_lossy().into_owned(),
+                format: CompressFormat::Zip,
+                level: 6,
+                password: None,
+                exclude_junk: true,
+                task_id: None,
+            },
+            control,
+            &mut noop,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, QPackError::Cancelled));
+        assert!(!out_zip.exists(), "取消压缩后应删除半成品文件");
+
+        let _ = fs::remove_dir_all(&work);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_macos_native_dmg_roundtrip() {
+        let work = temp_workspace("dmg_roundtrip");
+        let src_dir = work.join("demo_app");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("readme.txt"), "hello dmg native!").unwrap();
+
+        let out_dmg = work.join("demo.dmg");
+        let mut noop = |_: &ProgressSnapshot| {};
+        let comp = compress_files(
+            &CompressOptions {
+                input_paths: vec![src_dir.to_string_lossy().into_owned()],
+                output_path: out_dmg.to_string_lossy().into_owned(),
+                format: CompressFormat::Dmg,
+                level: 6,
+                password: None,
+                exclude_junk: true,
+                task_id: None,
+            },
+            TaskController::noop(),
+            &mut noop,
+        )
+        .expect("macOS 原生 DMG 打包应成功");
+        assert_eq!(comp.input_files, 1);
+        assert!(out_dmg.exists());
+
+        let info = inspect_archive(&out_dmg, None, None).expect("macOS 原生 DMG 解析应成功");
+        assert!(info.engine.contains("macOS 原生 DMG"));
+        assert!(info.entries.iter().any(|e| e.name == "readme.txt"));
+
+        let ext_dir = work.join("extracted");
+        let res = extract_archive(
+            &ExtractOptions {
+                archive_path: out_dmg.to_string_lossy().into_owned(),
+                dest_dir: ext_dir.to_string_lossy().into_owned(),
+                smart_extract: true,
+                password: None,
+                encoding: None,
+                selected_paths: None,
+                overwrite: true,
+                extract_mode: Some(ExtractMode::Smart),
+                task_id: None,
+            },
+            TaskController::noop(),
+            &mut noop,
+        )
+        .expect("macOS 原生 DMG 解压应成功");
+        assert_eq!(res.extracted_files, 1);
+        let content = fs::read_to_string(ext_dir.join("demo_app/readme.txt")).unwrap();
+        assert_eq!(content, "hello dmg native!");
+
+        let _ = fs::remove_dir_all(&work);
+    }
+
+    #[test]
+    fn test_bundled_sevenz_engine_ready() {
+        let status = get_engine_status();
+        assert!(status.sevenz_cli_ready, "内置 7-Zip 引擎应开箱即用");
+        assert!(status.supported_read_formats.iter().any(|f| f == "rar"));
+        assert!(status.supported_read_formats.iter().any(|f| f == "iso"));
+        assert!(status.supported_read_formats.iter().any(|f| f == "dmg"));
+    }
+}

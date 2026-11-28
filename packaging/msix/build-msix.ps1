@@ -1,4 +1,4 @@
-﻿# 在 Windows 环境下组装并打包 Microsoft Store 官方可上传的 .msix 包（含原生 Windows 11 一级右键菜单 COM 扩展）
+﻿# 在 Windows 环境下组装并打包 Microsoft Store 官方可上传的 .msix 包（含原生 Windows 11 一级右键菜单 COM 扩展、内置 7-Zip 引擎与多格式文件图标）
 param(
     [string]$Version = "",
     [string]$OutDir = "dist-windows"
@@ -17,6 +17,8 @@ $Version4 = if ($Version.Split(".").Count -eq 3) { "${Version}.0" } else { $Vers
 $ExePath = Join-Path $RootDir "src-tauri\target\release\qpack.exe"
 $DllPath = Join-Path $RootDir "src-tauri\win-shell-ext\target\release\qpack_shell_ext.dll"
 $IconsDir = Join-Path $RootDir "src-tauri\icons"
+$FileIconsDir = Join-Path $IconsDir "file-types"
+$WinBinariesDir = Join-Path $RootDir "src-tauri\binaries\windows"
 $ManifestTemplate = Join-Path $RootDir "packaging\msix\AppxManifest.xml"
 
 if (-not (Test-Path $ExePath)) { throw "未找到 $ExePath，请先执行 pnpm tauri build" }
@@ -27,11 +29,26 @@ if (Test-Path $StageDir) { Remove-Item -Recurse -Force $StageDir }
 $AssetsDir = Join-Path $StageDir "Assets"
 New-Item -ItemType Directory -Force -Path $AssetsDir | Out-Null
 
-# 1. 复制主程序与 Windows 11 一级右键菜单 COM DLL
+# 1. 复制主程序与 Windows 11 一级级联右键菜单 COM DLL
 Copy-Item $ExePath (Join-Path $StageDir "qpack.exe")
 Copy-Item $DllPath (Join-Path $StageDir "qpack_shell_ext.dll")
 
-# 2. 复制微软商店规范图标资源
+# 2. 复制内置官方 7-Zip 静态引擎（开箱支持 RAR / ISO / CAB / DMG / WIM 等全格式）
+if (Test-Path $WinBinariesDir) {
+    $StageBinDir = Join-Path $StageDir "binaries"
+    New-Item -ItemType Directory -Force -Path $StageBinDir | Out-Null
+    Copy-Item (Join-Path $WinBinariesDir "7z.exe") $StageBinDir -ErrorAction SilentlyContinue
+    Copy-Item (Join-Path $WinBinariesDir "7z.dll") $StageBinDir -ErrorAction SilentlyContinue
+}
+
+# 3. 复制多格式压缩包专属 .ico 图标
+if (Test-Path $FileIconsDir) {
+    $StageIconsDir = Join-Path $StageDir "icons\file-types"
+    New-Item -ItemType Directory -Force -Path $StageIconsDir | Out-Null
+    Copy-Item (Join-Path $FileIconsDir "*.ico") $StageIconsDir -ErrorAction SilentlyContinue
+}
+
+# 4. 复制微软商店规范图标资源
 $LogoFiles = @(
     "StoreLogo.png",
     "Square44x44Logo.png",
@@ -48,11 +65,11 @@ foreach ($f in $LogoFiles) {
     }
 }
 
-# 3. 渲染带 4 段版本号的 AppxManifest.xml
+# 5. 渲染带 4 段版本号的 AppxManifest.xml
 $ManifestContent = (Get-Content $ManifestTemplate -Raw -Encoding UTF8).Replace("__VERSION_4__", $Version4)
 [System.IO.File]::WriteAllText((Join-Path $StageDir "AppxManifest.xml"), $ManifestContent, [System.Text.UTF8Encoding]::new($false))
 
-# 4. 查找 Windows SDK 自带的 makeappx.exe 并打包 .msix
+# 6. 查找 Windows SDK 自带的 makeappx.exe 并打包 .msix
 $MakeAppx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" -ErrorAction SilentlyContinue |
     Sort-Object FullName -Descending |
     Select-Object -First 1

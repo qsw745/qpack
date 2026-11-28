@@ -1,5 +1,6 @@
 use crate::error::{QPackError, QResult};
 use serde::Serialize;
+use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use std::process::Command;
@@ -23,7 +24,8 @@ pub fn open_directory(path: &str) {
 
     #[cfg(target_os = "windows")]
     {
-        let _ = Command::new("explorer").arg(path).spawn();
+        let normalized = path.replace('/', "\\");
+        let _ = Command::new("explorer").arg(normalized).spawn();
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -32,7 +34,145 @@ pub fn open_directory(path: &str) {
     }
 }
 
-/// 发送轻量系统通知（用于后台静默解压/压缩完成提示）
+/// 在系统文件管理器中打开所在目录并高亮选中指定文件或文件夹
+pub fn reveal_in_file_manager(path: &str) {
+    let target = Path::new(path);
+
+    #[cfg(target_os = "macos")]
+    {
+        if target.exists() {
+            let _ = Command::new("open").args(["-R", path]).spawn();
+        } else if let Some(parent) = target.parent() {
+            let _ = Command::new("open").arg(parent).spawn();
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let normalized = path.replace('/', "\\");
+        if target.exists() {
+            // 必须使用 raw_arg，避免 Rust 对包含引号的 /select,"..." 参数二次转义导致无法选中文件
+            let _ = Command::new("explorer")
+                .raw_arg(format!("/select,\"{}\"", normalized))
+                .spawn();
+        } else if let Some(parent) = target.parent() {
+            let _ = Command::new("explorer")
+                .arg(parent.to_string_lossy().replace('/', "\\"))
+                .spawn();
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if target.exists() {
+            let uri = format!("file://{}", path);
+            let ok = Command::new("dbus-send")
+                .args([
+                    "--session",
+                    "--dest=org.freedesktop.FileManager1",
+                    "--type=method_call",
+                    "/org/freedesktop/FileManager1",
+                    "org.freedesktop.FileManager1.ShowItems",
+                    &format!("array:string:{}", uri),
+                    "string:",
+                ])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if ok {
+                return;
+            }
+        }
+        let fallback = if target.is_dir() {
+            target
+        } else {
+            target.parent().unwrap_or(target)
+        };
+        let _ = Command::new("xdg-open").arg(fallback).spawn();
+    }
+}
+
+/// 将指定文件或文件夹移入系统废纸篓 / 回收站（用于“解压完成后删除源压缩包”）
+pub fn trash_paths(paths: &[String]) -> QResult<()> {
+    for raw in paths {
+        let p = Path::new(raw);
+        if !p.exists() {
+            continue;
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let escaped = raw.replace('\\', "\\\\").replace('"', "\\\"");
+            let script = format!(
+                "tell application \"Finder\" to delete POSIX file \"{}\"",
+                escaped
+            );
+            let status = Command::new("osascript").args(["-e", &script]).status()?;
+            if !status.success() {
+                return Err(QPackError::ArchiveError(format!(
+                    "无法将文件移入废纸篓: {}",
+                    raw
+                )));
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let escaped = raw.replace('/', "\\").replace('\'', "''");
+            let ps_script = if p.is_dir() {
+                format!(
+                    "Add-Type -AssemblyName Microsoft.VisualBasic; \
+                     [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(\
+                     '{}', 'OnlyErrorDialogs', 'SendToRecycleBin')",
+                    escaped
+                )
+            } else {
+                format!(
+                    "Add-Type -AssemblyName Microsoft.VisualBasic; \
+                     [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(\
+                     '{}', 'OnlyErrorDialogs', 'SendToRecycleBin')",
+                    escaped
+                )
+            };
+            let status = Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()?;
+            if !status.success() {
+                return Err(QPackError::ArchiveError(format!(
+                    "无法将文件移入回收站: {}",
+                    raw
+                )));
+            }
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            let ok = Command::new("gio")
+                .args(["trash", raw])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+                || Command::new("trash-put")
+                    .arg(raw)
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+            if !ok {
+                return Err(QPackError::ArchiveError(format!(
+                    "无法将文件移入回收站: {}",
+                    raw
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 发送轻量系统通知
 pub fn notify_user(title: &str, body: &str) {
     #[cfg(target_os = "macos")]
     {
@@ -69,13 +209,16 @@ pub fn get_integration_status() -> SystemIntegrationStatus {
     #[cfg(target_os = "macos")]
     {
         let installed = macos_services_dir()
-            .map(|d| d.join("使用 QPack 智能解压.workflow").exists())
+            .map(|d| {
+                d.join("使用 QPack 智能解压.workflow").exists()
+                    && d.join("使用 QPack 压缩为 7Z.workflow").exists()
+            })
             .unwrap_or(false);
         SystemIntegrationStatus {
             platform: "macos".into(),
             context_menu_installed: installed,
             executable_path: exe,
-            hint: "安装后可在访达右键 ->「快速操作」中直接解压或压缩；在访达「显示简介 -> 打开方式」设为默认后，双击压缩包即可直接后台静默解压。".into(),
+            hint: "安装后可在访达右键 ->「快速操作」中直接智能解压、压缩为 ZIP / 7Z 或打开高级压缩；设为默认打开方式后，双击压缩包可直接弹出紧凑进度窗解压。".into(),
         }
     }
 
@@ -84,7 +227,7 @@ pub fn get_integration_status() -> SystemIntegrationStatus {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let installed = Command::new("reg")
-            .args(["query", r"HKCU\Software\Classes\*\shell\QPackCompress"])
+            .args(["query", r"HKCU\Software\Classes\*\shell\QPackMenu"])
             .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map(|o| o.status.success())
@@ -93,7 +236,7 @@ pub fn get_integration_status() -> SystemIntegrationStatus {
             platform: "windows".into(),
             context_menu_installed: installed,
             executable_path: exe,
-            hint: "注册后可在 Windows 资源管理器右键菜单直接压缩/解压（仅写入当前用户注册表，无需管理员权限）。Windows 11 请点击右键菜单底部的「显示更多选项」，或按住 Shift + 右键直接展开。".into(),
+            hint: "注册后可在 Windows 资源管理器右键「QPack」级联菜单中选择解压到此处、智能解压、解压到同名文件夹、压缩为 ZIP/7Z 或高级压缩（仅写入当前用户注册表，免管理员权限）。".into(),
         }
     }
 
@@ -103,24 +246,47 @@ pub fn get_integration_status() -> SystemIntegrationStatus {
             platform: "other".into(),
             context_menu_installed: false,
             executable_path: exe,
-            hint: "当前系统支持命令行参数 --extract 与 --compress。".into(),
+            hint: "当前系统支持命令行参数 --extract-smart、--extract-here、--compress-zip、--compress-7z 与 --compress-dialog。".into(),
         }
     }
 }
 
-/// 一键安装系统右键菜单 / 访达快速操作
+/// 一键安装系统右键菜单 / 访达快速操作（并同步注册多格式压缩包文件图标）
 pub fn install_context_menu() -> QResult<SystemIntegrationStatus> {
     #[cfg(target_os = "macos")]
     {
         install_macos_quick_actions()?;
+        refresh_file_type_icons(true)?;
     }
 
     #[cfg(target_os = "windows")]
     {
         install_windows_context_menu()?;
+        refresh_file_type_icons(true)?;
     }
 
     Ok(get_integration_status())
+}
+
+/// 刷新/修复系统中的压缩包文件类型图标（macOS 刷新 LaunchServices，Windows 写入专属 .ico 并通知资源管理器）
+pub fn refresh_file_type_icons(force: bool) -> QResult<()> {
+    #[cfg(target_os = "windows")]
+    {
+        register_windows_file_icons(force)?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = force;
+        refresh_macos_file_icons();
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = force;
+    }
+
+    Ok(())
 }
 
 /// 一键卸载系统右键菜单 / 访达快速操作
@@ -145,6 +311,14 @@ pub fn uninstall_context_menu() -> QResult<SystemIntegrationStatus> {
 fn macos_services_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Services"))
 }
+
+#[cfg(target_os = "macos")]
+const MACOS_WORKFLOW_NAMES: &[&str] = &[
+    "使用 QPack 智能解压",
+    "使用 QPack 压缩为 ZIP",
+    "使用 QPack 压缩为 7Z",
+    "使用 QPack 高级压缩",
+];
 
 #[cfg(target_os = "macos")]
 fn write_macos_workflow(
@@ -365,7 +539,27 @@ fn resolve_macos_exe_str() -> QResult<String> {
     Ok(exe)
 }
 
-/// 首次启动时自动静默注册系统右键菜单（macOS 访达快速操作 / Windows 资源管理器右键）
+/// 刷新 macOS LaunchServices 数据库以立即生效 .icns 文件类型图标
+#[cfg(target_os = "macos")]
+fn refresh_macos_file_icons() {
+    let app_bundle = current_exe_str()
+        .ok()
+        .and_then(|exe| {
+            exe.find(".app/Contents/MacOS/")
+                .map(|idx| format!("{}.app", &exe[..idx]))
+        })
+        .unwrap_or_else(|| "/Applications/QPack.app".into());
+
+    if Path::new(&app_bundle).exists() {
+        let _ = Command::new(
+            "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+        )
+        .args(["-f", &app_bundle])
+        .spawn();
+    }
+}
+
+/// 首次启动时自动静默注册系统右键菜单与多格式压缩包图标
 pub fn ensure_system_context_menu_on_startup() {
     #[cfg(target_os = "macos")]
     {
@@ -375,6 +569,7 @@ pub fn ensure_system_context_menu_on_startup() {
                 if !status.context_menu_installed {
                     let _ = install_macos_quick_actions();
                 }
+                refresh_macos_file_icons();
             }
         }
     }
@@ -385,6 +580,9 @@ pub fn ensure_system_context_menu_on_startup() {
             let status = get_integration_status();
             if !status.context_menu_installed {
                 let _ = install_windows_context_menu();
+            }
+            if !windows_file_icons_registered() {
+                let _ = register_windows_file_icons(false);
             }
         });
     }
@@ -400,12 +598,22 @@ fn install_macos_quick_actions() -> QResult<()> {
     write_macos_workflow(
         &dir,
         "使用 QPack 智能解压",
-        &format!("\"{}\" --extract \"$@\"", escaped_exe),
+        &format!("\"{}\" --extract-smart \"$@\"", escaped_exe),
     )?;
     write_macos_workflow(
         &dir,
         "使用 QPack 压缩为 ZIP",
-        &format!("\"{}\" --compress \"$@\"", escaped_exe),
+        &format!("\"{}\" --compress-zip \"$@\"", escaped_exe),
+    )?;
+    write_macos_workflow(
+        &dir,
+        "使用 QPack 压缩为 7Z",
+        &format!("\"{}\" --compress-7z \"$@\"", escaped_exe),
+    )?;
+    write_macos_workflow(
+        &dir,
+        "使用 QPack 高级压缩",
+        &format!("\"{}\" --compress-dialog \"$@\"", escaped_exe),
     )?;
 
     // 刷新 macOS Services / 快速操作缓存
@@ -423,8 +631,8 @@ fn uninstall_macos_quick_actions() -> QResult<()> {
     let Some(dir) = macos_services_dir() else {
         return Ok(());
     };
-    for name in ["使用 QPack 智能解压.workflow", "使用 QPack 压缩为 ZIP.workflow"] {
-        let p = dir.join(name);
+    for name in MACOS_WORKFLOW_NAMES {
+        let p = dir.join(format!("{}.workflow", name));
         if p.exists() {
             std::fs::remove_dir_all(p)?;
         }
@@ -436,7 +644,7 @@ fn uninstall_macos_quick_actions() -> QResult<()> {
 }
 
 // ============================================================================
-// Windows: 写入 HKCU\Software\Classes 注册表（免管理员权限）
+// Windows: 写入 HKCU\Software\Classes 级联右键菜单（免管理员权限）
 // ============================================================================
 #[cfg(target_os = "windows")]
 fn run_reg(args: &[&str]) -> QResult<()> {
@@ -453,104 +661,300 @@ fn run_reg(args: &[&str]) -> QResult<()> {
 }
 
 #[cfg(target_os = "windows")]
-fn install_windows_context_menu() -> QResult<()> {
+fn reg_set(key: &str, value_name: Option<&str>, data: &str) -> QResult<()> {
+    match value_name {
+        Some(name) => run_reg(&["add", key, "/v", name, "/d", data, "/f"]),
+        None => run_reg(&["add", key, "/ve", "/d", data, "/f"]),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn reg_query_default(key: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = Command::new("reg")
+        .args(["query", key, "/ve"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for line in stdout.lines() {
+        if let Some(pos) = line.find("REG_SZ") {
+            let val = line[pos + 6..].trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn notify_shell_assoc_changed() {
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SHChangeNotify(
+            w_event_id: i32,
+            u_flags: u32,
+            dw_item1: *const std::ffi::c_void,
+            dw_item2: *const std::ffi::c_void,
+        );
+    }
+    const SHCNE_ASSOCCHANGED: i32 = 0x0800_0000;
+    const SHCNF_IDLIST: u32 = 0x0000;
+    unsafe {
+        SHChangeNotify(
+            SHCNE_ASSOCCHANGED,
+            SHCNF_IDLIST,
+            std::ptr::null(),
+            std::ptr::null(),
+        );
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_file_icon(exe_path: &str, icon_file_name: &str) -> String {
+    if let Some(exe_dir) = Path::new(exe_path).parent() {
+        for candidate in [
+            exe_dir.join("icons").join("file-types").join(icon_file_name),
+            exe_dir
+                .join("resources")
+                .join("icons")
+                .join("file-types")
+                .join(icon_file_name),
+        ] {
+            if candidate.is_file() {
+                return candidate.to_string_lossy().replace('/', "\\");
+            }
+        }
+    }
+    format!("\"{}\",0", exe_path)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_file_icons_registered() -> bool {
+    let Some(val) = reg_query_default(r"HKCU\Software\Classes\QPack.7z\DefaultIcon") else {
+        return false;
+    };
+    val.to_ascii_lowercase().contains("file-7z.ico")
+}
+
+/// 为所有受支持的压缩包扩展名注册 QPack 专属格式图标，并刷新 Windows 资源管理器图标缓存
+#[cfg(target_os = "windows")]
+fn register_windows_file_icons(force: bool) -> QResult<()> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
     let exe = current_exe_str()?;
-    let extract_cmd = format!("\"{}\" --extract \"%1\"", exe);
-    let compress_cmd = format!("\"{}\" --compress \"%1\"", exe);
+    let open_cmd = format!("\"{}\" \"%1\"", exe);
+
+    // 清理旧版 NSIS 写入的含空格/斜杠失效 ProgID 键
+    let legacy_prog_ids = [
+        "ZIP Archive",
+        "7-Zip Archive",
+        "RAR Archive",
+        "TAR / Unix Archive",
+        "Disk / Cabinet Image",
+    ];
+    for legacy in legacy_prog_ids {
+        let key = format!(r"HKCU\Software\Classes\{}", legacy);
+        let _ = Command::new("reg")
+            .args(["delete", &key, "/f"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+    }
+
+    // 格式分组：(ProgID, 类型描述, 图标文件名, 关联扩展名列表)
+    let groups: &[(&str, &str, &str, &[&str])] = &[
+        (
+            "QPack.zip",
+            "QPack ZIP 压缩包",
+            "file-zip.ico",
+            &["zip", "jar", "apk", "ipa", "epub", "cbz"],
+        ),
+        ("QPack.7z", "QPack 7Z 压缩包", "file-7z.ico", &["7z"]),
+        ("QPack.rar", "QPack RAR 压缩包", "file-rar.ico", &["rar"]),
+        ("QPack.tar", "QPack TAR 归档文件", "file-tar.ico", &["tar"]),
+        (
+            "QPack.gz",
+            "QPack GZIP 压缩包",
+            "file-gz.ico",
+            &["gz", "tgz"],
+        ),
+        (
+            "QPack.zst",
+            "QPack Zstandard 压缩包",
+            "file-zst.ico",
+            &["zst", "tzst"],
+        ),
+        (
+            "QPack.archive",
+            "QPack 压缩包",
+            "file-archive.ico",
+            &[
+                "bz2", "tbz2", "xz", "txz", "iso", "cab", "dmg", "wim", "rpm", "deb", "lzh",
+                "arj", "cpio",
+            ],
+        ),
+    ];
+
+    for &(prog_id, desc, icon_name, exts) in groups {
+        let prog_key = format!(r"HKCU\Software\Classes\{}", prog_id);
+        let icon_key = format!(r"{}\DefaultIcon", prog_key);
+        let shell_key = format!(r"{}\shell", prog_key);
+        let open_key = format!(r"{}\shell\open", prog_key);
+        let cmd_key = format!(r"{}\shell\open\command", prog_key);
+
+        let icon_val = resolve_windows_file_icon(&exe, icon_name);
+        reg_set(&prog_key, None, desc)?;
+        reg_set(&icon_key, None, &icon_val)?;
+        reg_set(&shell_key, None, "open")?;
+        reg_set(&open_key, None, "使用 QPack 打开")?;
+        reg_set(&cmd_key, None, &open_cmd)?;
+
+        for ext in exts {
+            let ext_key = format!(r"HKCU\Software\Classes\.{}", ext);
+            let open_with_key = format!(r"{}\OpenWithProgids", ext_key);
+            let _ = run_reg(&["add", &open_with_key, "/v", prog_id, "/t", "REG_NONE", "/f"]);
+
+            let current_prog = reg_query_default(&ext_key);
+            let is_legacy = current_prog
+                .as_deref()
+                .map(|c| legacy_prog_ids.contains(&c))
+                .unwrap_or(false);
+            let is_qpack = current_prog
+                .as_deref()
+                .map(|c| c.starts_with("QPack."))
+                .unwrap_or(false);
+
+            // 若强制刷新、尚未关联、或指向旧版损坏 ProgID，则绑定到 QPack 专属格式图标
+            if force || current_prog.is_none() || is_legacy || is_qpack {
+                let _ = reg_set(&ext_key, None, prog_id);
+            }
+        }
+    }
+
+    notify_shell_assoc_changed();
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn install_windows_cascade(
+    parent_key: &str,
+    icon_val: &str,
+    items: &[(&str, &str, String)],
+) -> QResult<()> {
+    reg_set(parent_key, Some("MUIVerb"), "QPack")?;
+    reg_set(parent_key, Some("Icon"), icon_val)?;
+    reg_set(parent_key, Some("SubCommands"), "")?;
+
+    for (sub_id, label, command) in items {
+        let sub_key = format!(r"{}\shell\{}", parent_key, sub_id);
+        let cmd_key = format!(r"{}\command", sub_key);
+        reg_set(&sub_key, None, label)?;
+        reg_set(&sub_key, Some("Icon"), icon_val)?;
+        reg_set(&cmd_key, None, command)?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn install_windows_context_menu() -> QResult<()> {
+    // 先清理旧版扁平键
+    let _ = uninstall_windows_context_menu();
+
+    let exe = current_exe_str()?;
     let icon_val = format!("\"{}\",0", exe);
 
-    // 1. 任意文件右键 -> 使用 QPack 压缩为 ZIP
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\*\shell\QPackCompress",
-        "/ve",
-        "/d",
-        "使用 QPack 压缩为 ZIP",
-        "/f",
-    ])?;
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\*\shell\QPackCompress",
-        "/v",
-        "Icon",
-        "/d",
-        &icon_val,
-        "/f",
-    ])?;
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\*\shell\QPackCompress\command",
-        "/ve",
-        "/d",
-        &compress_cmd,
-        "/f",
-    ])?;
+    let file_items = vec![
+        (
+            "01_extract_smart",
+            "智能解压到此处",
+            format!("\"{}\" --extract-smart \"%1\"", exe),
+        ),
+        (
+            "02_extract_here",
+            "解压到此处",
+            format!("\"{}\" --extract-here \"%1\"", exe),
+        ),
+        (
+            "03_extract_subfolder",
+            "解压到同名文件夹",
+            format!("\"{}\" --extract-subfolder \"%1\"", exe),
+        ),
+        (
+            "04_extract_to",
+            "解压到其他文件夹...",
+            format!("\"{}\" --extract-to \"%1\"", exe),
+        ),
+        ("05_open", "用 QPack 打开...", format!("\"{}\" \"%1\"", exe)),
+        (
+            "06_compress_zip",
+            "压缩为 ZIP",
+            format!("\"{}\" --compress-zip \"%1\"", exe),
+        ),
+        (
+            "07_compress_7z",
+            "压缩为 7Z",
+            format!("\"{}\" --compress-7z \"%1\"", exe),
+        ),
+        (
+            "08_compress_dialog",
+            "添加到压缩包...",
+            format!("\"{}\" --compress-dialog \"%1\"", exe),
+        ),
+    ];
 
-    // 2. 文件夹右键 -> 使用 QPack 压缩为 ZIP
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\Directory\shell\QPackCompress",
-        "/ve",
-        "/d",
-        "使用 QPack 压缩为 ZIP",
-        "/f",
-    ])?;
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\Directory\shell\QPackCompress",
-        "/v",
-        "Icon",
-        "/d",
-        &icon_val,
-        "/f",
-    ])?;
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\Directory\shell\QPackCompress\command",
-        "/ve",
-        "/d",
-        &compress_cmd,
-        "/f",
-    ])?;
+    let dir_items = vec![
+        (
+            "01_compress_zip",
+            "压缩为 ZIP",
+            format!("\"{}\" --compress-zip \"%1\"", exe),
+        ),
+        (
+            "02_compress_7z",
+            "压缩为 7Z",
+            format!("\"{}\" --compress-7z \"%1\"", exe),
+        ),
+        (
+            "03_compress_dialog",
+            "添加到压缩包...",
+            format!("\"{}\" --compress-dialog \"%1\"", exe),
+        ),
+    ];
 
-    // 3. 任意文件右键 -> 使用 QPack 智能解压
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\*\shell\QPackExtract",
-        "/ve",
-        "/d",
-        "使用 QPack 智能解压",
-        "/f",
-    ])?;
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\*\shell\QPackExtract",
-        "/v",
-        "Icon",
-        "/d",
+    install_windows_cascade(
+        r"HKCU\Software\Classes\*\shell\QPackMenu",
         &icon_val,
-        "/f",
-    ])?;
-    run_reg(&[
-        "add",
-        r"HKCU\Software\Classes\*\shell\QPackExtract\command",
-        "/ve",
-        "/d",
-        &extract_cmd,
-        "/f",
-    ])?;
+        &file_items,
+    )?;
+    install_windows_cascade(
+        r"HKCU\Software\Classes\Directory\shell\QPackMenu",
+        &icon_val,
+        &dir_items,
+    )?;
 
     Ok(())
 }
 
 #[cfg(target_os = "windows")]
 fn uninstall_windows_context_menu() -> QResult<()> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     for key in [
+        r"HKCU\Software\Classes\*\shell\QPackMenu",
+        r"HKCU\Software\Classes\Directory\shell\QPackMenu",
         r"HKCU\Software\Classes\*\shell\QPackCompress",
         r"HKCU\Software\Classes\Directory\shell\QPackCompress",
         r"HKCU\Software\Classes\*\shell\QPackExtract",
     ] {
-        let _ = Command::new("reg").args(["delete", key, "/f"]).status();
+        let _ = Command::new("reg")
+            .args(["delete", key, "/f"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
     }
     Ok(())
 }

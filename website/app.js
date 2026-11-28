@@ -2,30 +2,31 @@
  * QPack 官网发布配置（发版时只需更新版本号与对应安装包候选路径）
  */
 const RELEASE_CONFIG = {
-  version: "v0.1.2",
+  version: "v0.1.7",
   downloads: {
     "macos-arm64": {
       osName: "macOS (Apple Silicon)",
       label: "下载 macOS (Apple Silicon)",
       candidates: [
-        "./releases/QPack_0.1.2_aarch64.dmg",
-        "./releases/QPack_0.1.1_aarch64.dmg",
+        "./releases/QPack_0.1.7_aarch64.dmg",
+        "./releases/QPack_0.1.6_aarch64.dmg",
       ],
     },
     "macos-x64": {
       osName: "macOS (Intel)",
       label: "下载 macOS (Intel)",
       candidates: [
+        "./releases/QPack_0.1.7_x64.dmg",
+        "./releases/QPack_0.1.6_x64.dmg",
         "./releases/QPack_0.1.2_x64.dmg",
-        "./releases/QPack_0.1.1_x64.dmg",
       ],
     },
     "windows-x64": {
       osName: "Windows 64 位",
       label: "下载 Windows (64 位)",
       candidates: [
-        "./releases/QPack_0.1.2_x64-setup.exe",
-        "./releases/QPack_0.1.1_x64-setup.exe",
+        "./releases/QPack_0.1.7_x64-setup.exe",
+        "./releases/QPack_0.1.6_x64-setup.exe",
       ],
     },
   },

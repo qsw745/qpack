@@ -5,137 +5,97 @@ pub mod models;
 pub mod platform;
 pub mod settings;
 
-use crate::commands::PendingLaunchState;
-use crate::error::QPackError;
-use crate::models::{ArchiveFormat, CompressFormat, CompressOptions, ExtractOptions};
+use crate::archive::task_control::TaskRegistry;
+use crate::commands::{
+    PendingLaunchPayload, PendingLaunchState, StandaloneModeState, TrayCreatedState,
+};
+use crate::models::ArchiveFormat;
 use crate::settings::DoubleClickAction;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
-use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, WindowEvent};
 
-/// 无界面后台执行智能解压；若压缩包加密返回需要交由 GUI 打开的路径
-fn headless_smart_extract(paths: &[String]) -> Vec<String> {
-    let mut need_gui = Vec::new();
-
-    for raw in paths {
-        let p = Path::new(raw);
-        if !p.is_file() || ArchiveFormat::from_path(p) == ArchiveFormat::Unknown {
-            need_gui.push(raw.clone());
-            continue;
-        }
-        let dest = p
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."));
-        let opts = ExtractOptions {
-            archive_path: raw.clone(),
-            dest_dir: dest.to_string_lossy().into_owned(),
-            smart_extract: true,
-            password: None,
-            encoding: None,
-            selected_paths: None,
-            overwrite: true,
-        };
-        let mut noop = |_: &str, _: usize, _: usize| {};
-        match archive::extract_archive(&opts, &mut noop) {
-            Ok(res) => {
-                let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("压缩包");
-                platform::notify_user(
-                    "QPack 解压完成",
-                    &format!("{} 已智能解压至 {}", name, res.output_dir),
-                );
-                platform::open_directory(&res.output_dir);
-            }
-            Err(QPackError::InvalidPassword) => {
-                // 加密压缩包交由 GUI 弹出密码框
-                need_gui.push(raw.clone());
-            }
-            Err(err) => {
-                platform::notify_user("QPack 解压失败", &err.to_string());
-            }
-        }
-    }
-
-    need_gui
+/// 判断给定路径列表是否全部为受支持的压缩包文件
+fn are_all_archives(paths: &[String]) -> bool {
+    !paths.is_empty()
+        && paths.iter().all(|p| {
+            let path = Path::new(p);
+            path.is_file() && ArchiveFormat::from_path(path) != ArchiveFormat::Unknown
+        })
 }
 
-/// 无界面后台执行快速压缩为 ZIP
-fn headless_quick_compress(paths: &[String]) {
-    if paths.is_empty() {
-        return;
-    }
-    let cfg = settings::load_settings();
-    let out = commands::suggest_output_path(paths, CompressFormat::Zip);
-    let opts = CompressOptions {
-        input_paths: paths.to_vec(),
-        output_path: out.clone(),
-        format: CompressFormat::Zip,
-        level: 6,
-        password: None,
-        exclude_junk: cfg.exclude_junk,
-    };
-    let mut noop = |_: &str, _: usize, _: usize| {};
-    match archive::compress_files(&opts, &mut noop) {
-        Ok(res) => {
-            let name = Path::new(&res.output_path)
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("archive.zip");
-            platform::notify_user(
-                "QPack 压缩完成",
-                &format!("已生成 {}（共 {} 个文件）", name, res.input_files),
-            );
-        }
-        Err(err) => {
-            platform::notify_user("QPack 压缩失败", &err.to_string());
-        }
-    }
-}
-
-/// 处理命令行参数：若可直接后台静默完成则返回 None（直接退出进程），否则返回 (需交给 GUI 的路径, 是否自动触发解压)
-fn handle_cli_args_before_gui() -> Option<(Vec<String>, bool)> {
+/// 解析命令行参数为统一的启动任务载荷（所有右键与双击任务均通过图形进度窗口呈现）
+fn parse_cli_launch() -> PendingLaunchPayload {
     let args: Vec<String> = std::env::args()
         .skip(1)
         .filter(|a| !a.starts_with("-psn_"))
         .collect();
 
     if args.is_empty() {
-        return Some((Vec::new(), false));
+        return PendingLaunchPayload::default();
     }
 
-    match args[0].as_str() {
-        "--extract" => {
-            // 右键菜单触发解压时唤起窗口展示实时进度与冲突提示，解压完自动打开目标目录
-            let files: Vec<String> = args[1..].to_vec();
-            return Some((files, true));
-        }
-        "--compress" => {
-            let files: Vec<String> = args[1..].to_vec();
-            headless_quick_compress(&files);
-            if let Some(first) = files.first() {
-                if let Some(parent) = Path::new(first).parent() {
-                    platform::open_directory(&parent.to_string_lossy());
-                }
-            }
-            return None;
-        }
+    let first = args[0].as_str();
+    let rest = args[1..].to_vec();
+
+    match first {
+        "--extract" | "--extract-smart" => PendingLaunchPayload {
+            paths: rest,
+            mode: "extract-smart".into(),
+            standalone: true,
+        },
+        "--extract-here" => PendingLaunchPayload {
+            paths: rest,
+            mode: "extract-here".into(),
+            standalone: true,
+        },
+        "--extract-subfolder" => PendingLaunchPayload {
+            paths: rest,
+            mode: "extract-subfolder".into(),
+            standalone: true,
+        },
+        "--extract-to" => PendingLaunchPayload {
+            paths: rest,
+            mode: "extract-to".into(),
+            standalone: true,
+        },
+        "--compress" | "--compress-zip" => PendingLaunchPayload {
+            paths: rest,
+            mode: "compress-zip".into(),
+            standalone: true,
+        },
+        "--compress-7z" => PendingLaunchPayload {
+            paths: rest,
+            mode: "compress-7z".into(),
+            standalone: true,
+        },
+        "--compress-dialog" => PendingLaunchPayload {
+            paths: rest,
+            mode: "compress-dialog".into(),
+            standalone: false,
+        },
         _ => {
             let cfg = settings::load_settings();
             if cfg.double_click_action == DoubleClickAction::SmartExtract
-                && args
-                    .iter()
-                    .all(|p| Path::new(p).is_file() && ArchiveFormat::from_path(Path::new(p)) != ArchiveFormat::Unknown)
+                && are_all_archives(&args)
             {
-                let need_gui = headless_smart_extract(&args);
-                if need_gui.is_empty() {
-                    return None;
+                PendingLaunchPayload {
+                    paths: args,
+                    mode: "extract-smart".into(),
+                    standalone: true,
                 }
-                return Some((need_gui, false));
+            } else {
+                PendingLaunchPayload {
+                    paths: args,
+                    mode: "open".into(),
+                    standalone: false,
+                }
             }
-            return Some((args, false));
         }
     }
 }
@@ -157,27 +117,32 @@ fn handle_opened_paths(app: &AppHandle, paths: Vec<String>) {
     }
 
     let cfg = settings::load_settings();
-    let all_archives = paths
-        .iter()
-        .all(|p| Path::new(p).is_file() && ArchiveFormat::from_path(Path::new(p)) != ArchiveFormat::Unknown);
-
-    if all_archives && cfg.double_click_action == DoubleClickAction::SmartExtract {
-        let handle = app.clone();
-        std::thread::spawn(move || {
-            let need_gui = headless_smart_extract(&paths);
-            if !need_gui.is_empty() {
-                show_main_window(&handle);
-                let _ = handle.emit("qpack://open-paths", need_gui);
-            }
-        });
+    let all_archives = are_all_archives(&paths);
+    let mode = if all_archives && cfg.double_click_action == DoubleClickAction::SmartExtract {
+        "extract-smart".to_string()
     } else {
+        "open".to_string()
+    };
+
+    let standalone_state = app.state::<StandaloneModeState>();
+    let payload = PendingLaunchPayload {
+        paths,
+        mode,
+        standalone: standalone_state.0.load(Ordering::SeqCst),
+    };
+
+    let pending = app.state::<PendingLaunchState>();
+    if pending.frontend_ready.load(Ordering::SeqCst) {
         show_main_window(app);
-        let _ = app.emit("qpack://open-paths", paths);
+        let _ = app.emit("qpack://launch", payload);
+    } else {
+        *pending.payload.lock().unwrap() = Some(payload);
+        show_main_window(app);
     }
 }
 
 /// 构建跨平台系统托盘 / macOS 菜单栏常驻图标
-fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "show", "打开 QPack", true, None::<&str>)?;
     let compress_item = MenuItem::with_id(app, "compress", "新建压缩包...", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出 QPack", true, None::<&str>)?;
@@ -226,22 +191,27 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 优先处理静默命令行模式（双击静默解压 / 访达快速操作 / Windows 右键菜单）
-    let Some((initial_paths, auto_extract)) = handle_cli_args_before_gui() else {
-        return;
-    };
+    let initial_launch = parse_cli_launch();
+    let is_standalone = initial_launch.standalone && !initial_launch.paths.is_empty();
+    let has_initial_payload = !initial_launch.paths.is_empty();
 
     let app = tauri::Builder::default()
         .manage(PendingLaunchState {
-            paths: std::sync::Mutex::new(initial_paths),
-            auto_extract: std::sync::Mutex::new(auto_extract),
+            payload: Mutex::new(if has_initial_payload {
+                Some(initial_launch)
+            } else {
+                None
+            }),
+            frontend_ready: AtomicBool::new(false),
         })
+        .manage(StandaloneModeState(AtomicBool::new(is_standalone)))
+        .manage(TrayCreatedState(AtomicBool::new(false)))
+        .manage(TaskRegistry::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .setup(|app| {
-            // 显式为主窗口设置高清图标并确保在任务栏正常显示（Windows 使用满幅图标避免偏小）
+        .setup(move |app| {
             if let Some(win) = app.get_webview_window("main") {
                 #[cfg(target_os = "windows")]
                 let win_icon_bytes: &[u8] = include_bytes!("../icons/win-taskbar-128.png");
@@ -252,13 +222,42 @@ pub fn run() {
                     let _ = win.set_icon(win_icon);
                 }
                 let _ = win.set_skip_taskbar(false);
+
+                if is_standalone {
+                    // 独立紧凑进度窗口（类似 Bandizip 进度对话框）
+                    let _ = win.set_min_size(Some(Size::Logical(LogicalSize::new(460.0, 300.0))));
+                    let _ = win.set_size(Size::Logical(LogicalSize::new(540.0, 350.0)));
+                    let _ = win.set_title("QPack");
+                    let _ = win.center();
+                } else {
+                    let _ = win.center();
+                }
+
+                let _ = win.show();
+                let _ = win.set_focus();
             }
-            setup_tray(app.handle())?;
-            platform::ensure_system_context_menu_on_startup();
+
+            if !is_standalone {
+                let tray_state = app.state::<TrayCreatedState>();
+                if !tray_state.0.swap(true, Ordering::SeqCst) {
+                    setup_tray(app.handle())?;
+                }
+                platform::ensure_system_context_menu_on_startup();
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                let standalone = window
+                    .app_handle()
+                    .state::<StandaloneModeState>()
+                    .0
+                    .load(Ordering::SeqCst);
+                // 独立任务窗关闭时直接退出，避免托盘残留
+                if standalone {
+                    return;
+                }
                 let cfg = settings::load_settings();
                 if cfg.close_to_tray {
                     api.prevent_close();
@@ -268,13 +267,20 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::take_pending_launch_paths,
+            commands::pause_task,
+            commands::resume_task,
+            commands::cancel_task,
+            commands::switch_to_main_window,
             commands::check_extract_conflict,
             commands::open_output_directory,
+            commands::reveal_in_file_manager,
+            commands::trash_paths,
             commands::get_app_settings,
             commands::update_app_settings,
             commands::get_system_integration_status,
             commands::install_system_context_menu,
             commands::uninstall_system_context_menu,
+            commands::refresh_file_icons,
             commands::detect_engine_status,
             commands::is_supported_archive,
             commands::inspect_archive,
